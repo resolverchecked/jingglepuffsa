@@ -38,7 +38,6 @@
       100% { transform: scale(1); }
     }
     @keyframes bomb-pulse { from { opacity:1; } to { opacity:0.5; } }
-
     .shake      { animation: shake 0.55s ease-out; }
     .flash-miss { animation: flash-red 0.55s ease-out; }
 
@@ -128,6 +127,7 @@
     .timer-fill { height: 100%; width: 0%; background: #00ffcc; transition: width .1s linear; }
     .timer-fill.urgent { background: #ff4444; }
     .timer-fill.bomb { background: #ff9900; }
+    .esc-fill { height: 100%; width: 0%; background: #ff6644; border-radius: 999px; transition: width .4s; }
 
     .mod-banner {
       border-radius: 8px;
@@ -263,7 +263,6 @@
       margin-bottom: 0;
     }
 
-    /* create-room popup */
     .modal-overlay {
       position: fixed;
       inset: 0;
@@ -303,7 +302,6 @@
     .modal-actions { display: flex; gap: 12px; margin-top: 18px; }
     .modal-actions button { margin-bottom: 0; flex: 1; }
 
-    /* react dial */
     .react-zone { margin-top: 12px; }
     .react-hint {
       text-align: center;
@@ -398,13 +396,7 @@
     }
     .reveal-flash.show-go   { display: block; background: #0a2a14; color: #00ff88; border: 1px solid #00ff88; }
     .reveal-flash.show-fake { display: block; background: #2a0010; color: #ff3355; border: 1px solid #ff3355; }
-
-    .double-counter {
-      text-align: center;
-      font-size: 2rem;
-      margin-bottom: 8px;
-      letter-spacing: 8px;
-    }
+    .double-counter { text-align: center; font-size: 2rem; margin-bottom: 8px; letter-spacing: 8px; }
   </style>
 </head>
 <body>
@@ -435,7 +427,7 @@
         </div>
         <div class="htp-step">
           <div class="htp-num">3</div>
-          <div class="htp-text"><strong>React when the signal fires.</strong> Wrong = penalty + screen shake.</div>
+          <div class="htp-text"><strong>Hold, line up your choice, then release.</strong> Wrong = penalty + screen shake.</div>
         </div>
         <div class="htp-step">
           <div class="htp-num">4</div>
@@ -550,7 +542,7 @@
         <span id="esc-pct">0%</span>
       </div>
       <div class="timer-bar"><div class="timer-fill" id="timer-fill"></div></div>
-      <div class="timer-bar"><div class="esc-fill" id="esc-fill" style="width:0%"></div></div>
+      <div class="timer-bar"><div class="esc-fill" id="esc-fill"></div></div>
 
       <div class="reveal-flash" id="reveal-flash"></div>
       <div class="held-strip" id="held-strip"></div>
@@ -592,7 +584,7 @@
           <div class="react-half react-right" id="react-right">FAKE</div>
           <div id="react-slider" class="react-slider">HOLD</div>
         </div>
-        <div id="react-hint" class="react-hint">Drag left for GO, right for FAKE, then release.</div>
+        <div id="react-hint" class="react-hint">Hold, slide to the answer, then release.</div>
       </div>
     </div>
 
@@ -774,7 +766,6 @@ function setAudioPhase(phase, diff, modifier) {
   }
   if (phase === "resolve") { note(440,"triangle",0.3,0.1); note(550,"triangle",0.3,0.08,0.08); }
 }
-
 function playWin()     { if (!audioCtx) return; stopPulse(); [523,659,784,1047].forEach((f,i) => note(f,"triangle",0.4,0.18,i*0.12)); }
 function playLose()    { if (!audioCtx) return; stopPulse(); [392,349,294,220].forEach((f,i) => note(f,"sawtooth",0.4,0.14,i*0.14)); }
 function playMiss()    { if (!audioCtx) return; note(200,"sawtooth",0.3,0.22); note(150,"sawtooth",0.4,0.18,0.15); }
@@ -824,24 +815,13 @@ function openCreatePopup() {
 
   pendingCreateRoom = { name, mode, difficulty: diff, totalRounds: rounds };
 
-  const modeLabel = {
-    duel: "1v1 / Duel",
-    team: "2v2 / Team",
-    ffa: "FFA"
-  }[mode] || mode.toUpperCase();
-
-  const diffLabel = {
-    easy: "Easy",
-    normal: "Normal",
-    hard: "Hard",
-    impossible: "Impossible"
-  }[diff] || diff.toUpperCase();
+  const modeLabel = { duel: "1v1 / Duel", team: "2v2 / Team", ffa: "FFA" }[mode] || mode.toUpperCase();
+  const diffLabel = { easy: "Easy", normal: "Normal", hard: "Hard", impossible: "Impossible" }[diff] || diff.toUpperCase();
 
   document.getElementById("modal-name").textContent = name;
   document.getElementById("modal-mode").textContent = modeLabel;
   document.getElementById("modal-diff").textContent = diffLabel;
   document.getElementById("modal-rounds").textContent = rounds;
-
   document.getElementById("create-modal").style.display = "flex";
 }
 
@@ -877,7 +857,8 @@ function joinRoom() {
 }
 
 function showLobby(state) {
-  showScreen("screen-lobby"); stopPulse();
+  showScreen("screen-lobby");
+  stopPulse();
   document.getElementById("lobby-code").textContent = state.code;
   document.getElementById("lobby-mode").className = `mode-badge ${MODE[state.mode]?.cls || "mode-duel"}`;
   document.getElementById("lobby-mode").textContent = MODE[state.mode]?.label || state.mode.toUpperCase();
@@ -904,7 +885,6 @@ function clueAClass(clueA) {
   if (COOL_COLORS.has(color)) return "cool";
   return "bomb-clue";
 }
-
 function clueBSignal(word) { return word && word.length % 2 === 1 ? "go" : "fake"; }
 function lockSignal(lock) {
   if (!lock || lock === "!!!") return "bomb";
@@ -919,11 +899,9 @@ function renderPowerupCard(state) {
     container.style.display = "none";
     return;
   }
-
   const meta = PU_META[pu.type] || { icon: "?", name: pu.type, desc: "" };
   const claimed = !!pu.claimedBy;
   const claimedByMe = pu.claimedBy === mySocketId;
-
   container.style.display = "block";
   if (claimed) {
     const who = claimedByMe ? "You" : (pu.claimedByName || "Someone");
@@ -1000,7 +978,6 @@ function bindReactDial() {
   if (reactDialBound) return;
   const dial = document.getElementById("react-dial");
   if (!dial) return;
-
   const slider = document.getElementById("react-slider");
   const getClientX = (e) => e.clientX ?? e.touches?.[0]?.clientX ?? 0;
 
@@ -1074,7 +1051,6 @@ function resetReactDial() {
 
 function lockAndSend(type) {
   if (reactLocked && currentReactMode !== "doublehit") return;
-
   const dial = document.getElementById("react-dial");
   const hint = document.getElementById("react-hint");
   const slider = document.getElementById("react-slider");
@@ -1094,8 +1070,8 @@ function lockAndSend(type) {
       reactLocked = false;
       if (dial) dial.classList.remove("locked");
       if (hint) {
-        if (currentReactMode === "doublehit") hint.textContent = "Hit again.";
-        else hint.textContent = "Drag left for GO, right for FAKE, then release.";
+        if (currentReactMode === "doublehit") hint.textContent = "Release again.";
+        else hint.textContent = "Hold, slide to the answer, then release.";
       }
       return;
     }
@@ -1115,9 +1091,9 @@ function lockAndSend(type) {
       if (dial) dial.classList.remove("locked");
       resetReactDial();
       if (hint) {
-        if (currentReactMode === "bomb") hint.textContent = "Release anywhere to DEFUSE.";
-        else if (currentReactMode === "doublehit") hint.textContent = "Hit again.";
-        else hint.textContent = "Drag left for GO, right for FAKE, then release.";
+        if (currentReactMode === "bomb") hint.textContent = "Hold, slide, release to defuse.";
+        else if (currentReactMode === "doublehit") hint.textContent = "Release again.";
+        else hint.textContent = "Hold, slide to the answer, then release.";
       }
     }, 220);
   });
@@ -1125,7 +1101,6 @@ function lockAndSend(type) {
 
 function showGame(state) {
   showScreen("screen-game");
-
   const phaseMap = { prep:["prep","PREP"], signal:["signal","SIGNAL"], resolve:["resolve","RESOLVE"], starting:["lobby","STARTING"] };
   const [pCls, pLabel] = phaseMap[state.phase] || ["lobby", state.phase.toUpperCase()];
   const badge = document.getElementById("game-phase-badge");
@@ -1149,7 +1124,7 @@ function showGame(state) {
   const mod = {
     normal: { cls: "normal", icon: "", title: "NORMAL ROUND", desc: "Read the clues." },
     inverted: { cls: "inverted", icon: "⚠", title: "INVERTED", desc: "The signal lies. Clues are still true." },
-    bomb: { cls: "bomb", icon: "💣", title: "BOMB ROUND", desc: "Release the dial to DEFUSE." },
+    bomb: { cls: "bomb", icon: "💣", title: "BOMB ROUND", desc: "Hold and release to DEFUSE." },
     doublehit: { cls: "double", icon: "⚡", title: "DOUBLE HIT", desc: "Release twice before time runs out." },
   }[modifier] || { cls: "normal", icon: "", title: "NORMAL ROUND", desc: "Read the clues." };
 
@@ -1268,9 +1243,9 @@ function showGame(state) {
     resetReactDial();
     const hint = document.getElementById("react-hint");
     if (hint) {
-      if (modifier === "bomb") hint.textContent = "Release anywhere to DEFUSE.";
-      else if (modifier === "doublehit") hint.textContent = "Hit twice.";
-      else hint.textContent = "Drag left for GO, right for FAKE, then release.";
+      if (modifier === "bomb") hint.textContent = "Hold, slide, release to defuse.";
+      else if (modifier === "doublehit") hint.textContent = "Hold, release, then do it again.";
+      else hint.textContent = "Hold, slide to the answer, then release.";
     }
   } else {
     reactLocked = false;
