@@ -37,7 +37,7 @@ function rand(arr) {
 function maxPlayersForMode(mode) {
   if (mode === "duel") return 2;
   if (mode === "team") return 4;
-  return 6;
+  return 10;
 }
 
 function minPlayersForMode(mode) {
@@ -369,7 +369,7 @@ function assignTeamForJoin(room) {
 io.on("connection", (socket) => {
   socket.on("createRoom", ({ name, difficulty, totalRounds, mode }, cb) => {
     const diff = VALID_DIFFS.includes(difficulty) ? difficulty : "normal";
-    const gameMode = VALID_MODES.includes(mode) ? mode : "duel";
+    const gameMode = VALID_MODES.includes(mode) ? mode : "ffa";
     const code = makeCode();
     const room = {
       code,
@@ -430,14 +430,6 @@ io.on("connection", (socket) => {
     room.players.push(player);
 
     if (room.mode === "team" && room.teams) {
-      const target = room.teams.find((t) => t.id === player.team);
-      if (target) target.maxHp = target.hp = room.players.filter((p) => p.team === target.id).length * baseHpForDifficulty(room.difficulty);
-      room.teams.forEach((t) => {
-        const count = room.players.filter((p) => p.team === t.id).length;
-        t.maxHp = count * baseHpForDifficulty(room.difficulty);
-        t.hp = t.maxHp;
-      });
-      room.players.forEach((p) => { p.hp = baseHpForDifficulty(room.difficulty); p.maxHp = baseHpForDifficulty(room.difficulty); });
       room.teams = [
         {
           id: "A",
