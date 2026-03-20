@@ -1,0 +1,1017 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Signal Break</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: rgba(17, 24, 39, 0.82);
+      --panel-2: rgba(30, 41, 59, 0.85);
+      --text: #e5eefc;
+      --muted: #9fb0d0;
+      --accent: #7c3aed;
+      --good: #22c55e;
+      --bad: #ef4444;
+      --warn: #f59e0b;
+      --line: rgba(148, 163, 184, 0.2);
+      --shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
+    }
+
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(124, 58, 237, 0.32), transparent 28%),
+        radial-gradient(circle at top right, rgba(14, 165, 233, 0.22), transparent 22%),
+        radial-gradient(circle at bottom, rgba(34, 197, 94, 0.12), transparent 28%),
+        linear-gradient(180deg, #0b1020 0%, #090d18 100%);
+      overflow-x: hidden;
+    }
+
+    .wrap {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 18px;
+      align-items: stretch;
+      margin-bottom: 18px;
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(12px);
+    }
+
+    .hero-left, .hero-right, .panel, .sidebar, .stage, .log {
+      padding: 20px;
+    }
+
+    h1 {
+      margin: 0 0 10px;
+      font-size: clamp(2rem, 5vw, 4rem);
+      line-height: 0.98;
+      letter-spacing: -0.05em;
+    }
+
+    .sub {
+      color: var(--muted);
+      font-size: 1rem;
+      line-height: 1.6;
+      max-width: 66ch;
+    }
+
+    .tag-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .tag {
+      font-size: 0.86rem;
+      color: var(--muted);
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,0.03);
+      padding: 8px 12px;
+      border-radius: 999px;
+    }
+
+    .hero-right {
+      display: grid;
+      gap: 12px;
+      align-content: start;
+    }
+
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .metric {
+      background: var(--panel-2);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 14px;
+    }
+
+    .metric .label {
+      color: var(--muted);
+      font-size: 0.82rem;
+      margin-bottom: 8px;
+    }
+
+    .metric .value {
+      font-size: 1.5rem;
+      font-weight: 800;
+      letter-spacing: -0.04em;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 320px minmax(0, 1fr) 280px;
+      gap: 18px;
+      align-items: start;
+    }
+
+    .panel, .sidebar, .stage, .log {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(12px);
+    }
+
+    .section-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .section-title h2 {
+      margin: 0;
+      font-size: 1.1rem;
+      letter-spacing: -0.03em;
+    }
+
+    .hint {
+      color: var(--muted);
+      font-size: 0.88rem;
+    }
+
+    label {
+      display: block;
+      color: var(--muted);
+      font-size: 0.88rem;
+      margin-bottom: 6px;
+    }
+
+    input, select, button, textarea {
+      font: inherit;
+    }
+
+    input, select, textarea {
+      width: 100%;
+      color: var(--text);
+      background: rgba(2, 6, 23, 0.55);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 12px 14px;
+      outline: none;
+    }
+
+    input::placeholder, textarea::placeholder { color: #7182a7; }
+
+    .field { margin-bottom: 12px; }
+
+    .row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .row > * { flex: 1 1 120px; }
+
+    .btn {
+      border: 0;
+      border-radius: 16px;
+      padding: 12px 14px;
+      font-weight: 700;
+      color: white;
+      background: linear-gradient(135deg, #7c3aed, #2563eb);
+      cursor: pointer;
+      transition: transform 0.12s ease, filter 0.12s ease, opacity 0.12s ease;
+    }
+
+    .btn:hover { transform: translateY(-1px); filter: brightness(1.05); }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+    .btn.secondary { background: rgba(255,255,255,0.06); border: 1px solid var(--line); }
+    .btn.good { background: linear-gradient(135deg, #16a34a, #22c55e); }
+    .btn.bad { background: linear-gradient(135deg, #dc2626, #ef4444); }
+    .btn.warn { background: linear-gradient(135deg, #d97706, #f59e0b); }
+
+    .players {
+      display: grid;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .player {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 14px;
+      border-radius: 16px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--line);
+    }
+
+    .player.active {
+      border-color: rgba(124, 58, 237, 0.6);
+      box-shadow: inset 0 0 0 1px rgba(124, 58, 237, 0.18);
+    }
+
+    .player .name {
+      font-weight: 700;
+    }
+
+    .player .score {
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    .stage {
+      min-height: 560px;
+      display: grid;
+      gap: 16px;
+      align-content: start;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .stage.flash-go {
+      box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.55), var(--shadow);
+    }
+    .stage.flash-fake {
+      box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.55), var(--shadow);
+    }
+
+    .room {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 12px;
+    }
+
+    .clue {
+      min-height: 160px;
+      background: rgba(255,255,255,0.035);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      padding: 16px;
+      display: grid;
+      gap: 10px;
+      align-content: start;
+    }
+
+    .clue .title {
+      font-size: 0.9rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }
+
+    .clue .content {
+      font-size: 1.45rem;
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      word-break: break-word;
+    }
+
+    .clue .mini {
+      color: var(--muted);
+      font-size: 0.95rem;
+      line-height: 1.5;
+    }
+
+    .center {
+      display: grid;
+      gap: 12px;
+      padding: 18px;
+      background: rgba(2, 6, 23, 0.42);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+    }
+
+    .signal {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .signal-badge {
+      min-width: 120px;
+      text-align: center;
+      font-weight: 900;
+      letter-spacing: 0.12em;
+      border-radius: 999px;
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,0.05);
+    }
+
+    .signal-badge.go { color: #bbf7d0; border-color: rgba(34,197,94,0.5); background: rgba(34,197,94,0.14); }
+    .signal-badge.fake { color: #fecaca; border-color: rgba(239,68,68,0.5); background: rgba(239,68,68,0.14); }
+    .signal-badge.wait { color: #dbeafe; }
+
+    .progress {
+      height: 12px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid var(--line);
+    }
+
+    .progress > div {
+      height: 100%;
+      width: 0%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, #2563eb, #7c3aed, #22c55e);
+      transition: width 0.1s linear;
+    }
+
+    .big-message {
+      min-height: 116px;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      padding: 18px;
+      border-radius: 20px;
+      background: linear-gradient(135deg, rgba(124,58,237,0.18), rgba(37,99,235,0.1));
+      border: 1px solid rgba(124,58,237,0.24);
+    }
+
+    .big-message h3 {
+      margin: 0;
+      font-size: clamp(1.2rem, 3vw, 2rem);
+      letter-spacing: -0.04em;
+    }
+
+    .big-message p {
+      margin: 8px 0 0;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    .action-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .action-grid .btn { width: 100%; }
+
+    .stack {
+      display: grid;
+      gap: 12px;
+    }
+
+    .log {
+      min-height: 560px;
+      overflow: hidden;
+    }
+
+    .log-list {
+      display: grid;
+      gap: 10px;
+      max-height: 470px;
+      overflow: auto;
+      padding-right: 2px;
+    }
+
+    .log-item {
+      padding: 12px 14px;
+      border-radius: 16px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--line);
+      color: var(--text);
+      line-height: 1.5;
+      font-size: 0.95rem;
+    }
+
+    .log-item small {
+      color: var(--muted);
+      display: block;
+      margin-bottom: 6px;
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.11em;
+    }
+
+    .footer-note {
+      margin-top: 14px;
+      color: var(--muted);
+      font-size: 0.88rem;
+      line-height: 1.6;
+    }
+
+    .hidden { display: none !important; }
+    .shake { animation: shake 0.25s linear 0s 2; }
+    @keyframes shake {
+      0% { transform: translateX(0); }
+      25% { transform: translateX(4px); }
+      50% { transform: translateX(-4px); }
+      75% { transform: translateX(3px); }
+      100% { transform: translateX(0); }
+    }
+
+    @media (max-width: 1020px) {
+      .hero, .grid { grid-template-columns: 1fr; }
+      .stage, .log { min-height: auto; }
+      .log-list { max-height: 360px; }
+    }
+
+    @media (max-width: 700px) {
+      .room { grid-template-columns: 1fr; }
+      .action-grid { grid-template-columns: 1fr; }
+      .metric-grid { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <div class="card hero-left">
+        <h1>Signal Break</h1>
+        <div class="sub">
+          A chaotic co-op website game where players solve a split-information puzzle, but progress only happens when someone reacts fast enough to the right signal.
+          Wrong clicks hurt the team. Fake alerts try to trick you. Communication wins.
+        </div>
+        <div class="tag-row">
+          <span class="tag">Co-op / party game</span>
+          <span class="tag">Reaction windows</span>
+          <span class="tag">Split clues</span>
+          <span class="tag">Score chase</span>
+          <span class="tag">Local prototype</span>
+        </div>
+      </div>
+      <div class="card hero-right">
+        <div class="metric-grid">
+          <div class="metric">
+            <div class="label">State</div>
+            <div class="value" id="stateText">Lobby</div>
+          </div>
+          <div class="metric">
+            <div class="label">Round</div>
+            <div class="value" id="roundText">1</div>
+          </div>
+          <div class="metric">
+            <div class="label">Timer</div>
+            <div class="value" id="timerText">--</div>
+          </div>
+          <div class="metric">
+            <div class="label">Objective</div>
+            <div class="value" id="objectiveText">--</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="grid">
+      <aside class="panel">
+        <div class="section-title">
+          <h2>Lobby</h2>
+          <div class="hint">Enter 2–6 players</div>
+        </div>
+
+        <div class="field">
+          <label for="playerInput">Player names</label>
+          <input id="playerInput" placeholder="Alya, Ben, Cici, Dika" value="Alya, Ben, Cici" />
+        </div>
+
+        <div class="row">
+          <div class="field" style="margin-bottom:0;">
+            <label for="difficulty">Difficulty</label>
+            <select id="difficulty">
+              <option value="easy">Easy</option>
+              <option value="normal" selected>Normal</option>
+              <option value="hard">Hard</option>
+            </select>
+          </div>
+          <div class="field" style="margin-bottom:0;">
+            <label for="rounds">Rounds</label>
+            <select id="rounds">
+              <option value="3">3</option>
+              <option value="5" selected>5</option>
+              <option value="7">7</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="row" style="margin-top:12px;">
+          <button class="btn" id="startBtn">Start Game</button>
+          <button class="btn secondary" id="resetBtn">Reset</button>
+        </div>
+
+        <div class="players" id="playersList"></div>
+
+        <div class="footer-note">
+          Tip: this prototype is made for one browser screen. For true online multiplayer, wire these actions to a WebSocket room.
+        </div>
+      </aside>
+
+      <main class="stage card" id="stage">
+        <div class="section-title">
+          <h2>Room</h2>
+          <div class="hint" id="difficultyHint">Press Start to generate a new room</div>
+        </div>
+
+        <div class="signal">
+          <div class="signal-badge wait" id="signalBadge">WAIT</div>
+          <div class="progress"><div id="progressBar"></div></div>
+          <div class="hint" id="phaseHint">Lobby</div>
+        </div>
+
+        <div class="big-message">
+          <div>
+            <h3 id="messageTitle">Set up the lobby</h3>
+            <p id="messageBody">Players will get split clues, then a signal appears. Click the right button fast, or the room gets harder.</p>
+          </div>
+        </div>
+
+        <div class="room">
+          <div class="clue">
+            <div class="title">Player clue A</div>
+            <div class="content" id="clueA">—</div>
+            <div class="mini" id="clueAHelp">Your clue changes each round.</div>
+          </div>
+          <div class="clue">
+            <div class="title">Player clue B</div>
+            <div class="content" id="clueB">—</div>
+            <div class="mini" id="clueBHelp">Only one person needs to react to the signal.</div>
+          </div>
+          <div class="clue">
+            <div class="title">Shared lock</div>
+            <div class="content" id="lockCode">—</div>
+            <div class="mini" id="lockHelp">Use both clues to unlock the room.</div>
+          </div>
+        </div>
+
+        <div class="stack">
+          <div class="action-grid">
+            <button class="btn good" id="goBtn" disabled>GO</button>
+            <button class="btn bad" id="trapBtn" disabled>DON’T CLICK</button>
+            <button class="btn warn" id="hintBtn" disabled>Reveal hint</button>
+            <button class="btn secondary" id="skipBtn" disabled>Skip to next wave</button>
+          </div>
+          <div class="section-title" style="margin:0;">
+            <h2>Co-op progress</h2>
+            <div class="hint" id="progressText">0 / 0</div>
+          </div>
+          <div class="progress"><div id="teamProgress"></div></div>
+        </div>
+      </main>
+
+      <aside class="log card">
+        <div class="section-title">
+          <h2>Live feed</h2>
+          <div class="hint">What the room is doing</div>
+        </div>
+        <div class="log-list" id="logList"></div>
+      </aside>
+    </section>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+
+    const el = {
+      stateText: $("stateText"),
+      roundText: $("roundText"),
+      timerText: $("timerText"),
+      objectiveText: $("objectiveText"),
+      playersList: $("playersList"),
+      startBtn: $("startBtn"),
+      resetBtn: $("resetBtn"),
+      playerInput: $("playerInput"),
+      difficulty: $("difficulty"),
+      rounds: $("rounds"),
+      stage: $("stage"),
+      signalBadge: $("signalBadge"),
+      phaseHint: $("phaseHint"),
+      difficultyHint: $("difficultyHint"),
+      messageTitle: $("messageTitle"),
+      messageBody: $("messageBody"),
+      clueA: $("clueA"),
+      clueB: $("clueB"),
+      lockCode: $("lockCode"),
+      clueAHelp: $("clueAHelp"),
+      clueBHelp: $("clueBHelp"),
+      lockHelp: $("lockHelp"),
+      progressBar: $("progressBar"),
+      teamProgress: $("teamProgress"),
+      progressText: $("progressText"),
+      goBtn: $("goBtn"),
+      trapBtn: $("trapBtn"),
+      hintBtn: $("hintBtn"),
+      skipBtn: $("skipBtn"),
+      logList: $("logList"),
+    };
+
+    const state = {
+      players: [],
+      scores: [],
+      activePlayer: 0,
+      round: 1,
+      totalRounds: 5,
+      difficulty: "normal",
+      phase: "lobby",
+      lock: null,
+      clueA: null,
+      clueB: null,
+      answer: null,
+      revealedHint: false,
+      objective: 0,
+      completed: 0,
+      timer: 0,
+      timerMax: 0,
+      phaseEndsAt: 0,
+      loop: null,
+      signalType: null,
+      signalOpen: false,
+      awaitingChoice: false,
+      reactionLock: false,
+    };
+
+    const COLORS = ["RED", "BLUE", "GREEN", "YELLOW", "PURPLE", "CYAN"];
+    const SHAPES = ["▲", "●", "■", "◆", "★", "✚"];
+    const SYMBOLS = ["@", "#", "%", "&", "?", "$"];
+    const WORDS = ["ALPHA", "ORBIT", "GHOST", "NEON", "MIRROR", "VORTEX", "PULSE", "STATIC"];
+
+    function rand(arr) {
+      return arr[Math.floor(Math.random() * arr.length)];
+    }
+
+    function clamp(v, min, max) {
+      return Math.max(min, Math.min(max, v));
+    }
+
+    function parsePlayers() {
+      return el.playerInput.value
+        .split(",")
+        .map(s => s.trim())
+        .filter(Boolean)
+        .slice(0, 6);
+    }
+
+    function log(title, body) {
+      const item = document.createElement("div");
+      item.className = "log-item";
+      item.innerHTML = `<small>${title}</small>${body}`;
+      el.logList.prepend(item);
+    }
+
+    function updatePlayers() {
+      el.playersList.innerHTML = "";
+      state.players.forEach((name, i) => {
+        const div = document.createElement("div");
+        div.className = "player" + (i === state.activePlayer && state.phase !== "lobby" ? " active" : "");
+        div.innerHTML = `<div><div class="name">${name}</div><div class="score">Reaction ${Math.max(0, state.scores[i] || 0)}</div></div><div>${i === state.activePlayer && state.phase !== "lobby" ? "▶" : ""}</div>`;
+        el.playersList.appendChild(div);
+      });
+    }
+
+    function makeRound() {
+      const lock = String(Math.floor(100 + Math.random() * 900));
+      const clueA = rand(COLORS) + " " + rand(SHAPES);
+      const clueB = rand(WORDS) + " " + rand(SYMBOLS);
+      const answer = `${clueA.split(" ")[0][0]}-${clueB.split(" ")[0].slice(-1)}-${lock[1]}`;
+      return { lock, clueA, clueB, answer };
+    }
+
+    function difficultyConfig() {
+      const d = state.difficulty;
+      if (d === "easy") return { prep: 6000, reaction: 2800, trapChance: 0.22, objective: 4, penalty: 1 };
+      if (d === "hard") return { prep: 3000, reaction: 1500, trapChance: 0.46, objective: 7, penalty: 2 };
+      return { prep: 4500, reaction: 2100, trapChance: 0.34, objective: 5, penalty: 1 };
+    }
+
+    function setPhase(phase) {
+      state.phase = phase;
+      el.stateText.textContent = phase === "lobby" ? "Lobby" : phase === "prep" ? "Calm" : phase === "signal" ? "Signal" : phase === "resolve" ? "Resolve" : phase;
+      el.phaseHint.textContent = phase === "lobby" ? "Lobby" : phase === "prep" ? "Study the split clues" : phase === "signal" ? "React fast" : phase === "resolve" ? "Checking" : phase;
+      el.objectiveText.textContent = `${state.completed}/${state.objective || 0}`;
+      updateControls();
+    }
+
+    function updateControls() {
+      const active = state.phase !== "lobby";
+      el.goBtn.disabled = !active || !state.signalOpen;
+      el.trapBtn.disabled = !active || !state.signalOpen;
+      el.hintBtn.disabled = !active;
+      el.skipBtn.disabled = !active;
+    }
+
+    function updateHUD() {
+      el.roundText.textContent = state.round;
+      el.timerText.textContent = state.phase === "lobby" ? "--" : `${Math.max(0, Math.ceil(state.timer / 1000))}s`;
+      el.progressBar.style.width = `${state.phase === "prep" ? Math.min(100, (1 - state.timer / state.timerMax) * 100) : 0}%`;
+      el.teamProgress.style.width = `${state.objective ? (state.completed / state.objective) * 100 : 0}%`;
+      el.progressText.textContent = `${state.completed} / ${state.objective || 0}`;
+      updatePlayers();
+    }
+
+    function showRoundInfo() {
+      el.clueA.textContent = state.clueA || "—";
+      el.clueB.textContent = state.clueB || "—";
+      el.lockCode.textContent = state.lock || "—";
+      el.clueAHelp.textContent = state.phase === "lobby" ? "Your clue changes each round." : `Team clue: identify the first character from ${state.clueA?.split(" ")[0] || "..."}.`;
+      el.clueBHelp.textContent = state.phase === "lobby" ? "Only one person needs to react to the signal." : `Team clue: use the last character from ${state.clueB?.split(" ")[0] || "..."}.`;
+      el.lockHelp.textContent = state.phase === "lobby" ? "Use both clues to unlock the room." : `The lock is ${state.lock || "---"}.`;
+    }
+
+    function resetLog() {
+      el.logList.innerHTML = "";
+      log("System", "Lobby ready. Add names, pick difficulty, and start the room.");
+    }
+
+    function startGame() {
+      const players = parsePlayers();
+      if (players.length < 2) {
+        alert("Add at least 2 players.");
+        return;
+      }
+      state.players = players;
+      state.scores = players.map(() => 0);
+      state.activePlayer = 0;
+      state.round = 1;
+      state.totalRounds = parseInt(el.rounds.value, 10);
+      state.difficulty = el.difficulty.value;
+      state.completed = 0;
+      state.objective = difficultyConfig().objective;
+      state.revealedHint = false;
+      clearInterval(state.loop);
+      nextRound(true);
+      el.difficultyHint.textContent = `Difficulty: ${state.difficulty.toUpperCase()} · ${state.totalRounds} rounds`;
+      log("Start", `${players.join(", ")} entered the room.`);
+    }
+
+    function nextRound(first = false) {
+      const cfg = difficultyConfig();
+      state.signalType = null;
+      state.signalOpen = false;
+      state.awaitingChoice = false;
+      state.reactionLock = false;
+      state.revealedHint = false;
+      const roundData = makeRound();
+      state.lock = roundData.lock;
+      state.clueA = roundData.clueA;
+      state.clueB = roundData.clueB;
+      state.answer = roundData.answer;
+      state.timer = cfg.prep;
+      state.timerMax = cfg.prep;
+      setPhase("prep");
+      showRoundInfo();
+      el.messageTitle.textContent = first ? "Room online" : `Round ${state.round}`;
+      el.messageBody.textContent = "Study the split clues. One signal window will appear. Choose carefully: a fake signal can hit too.";
+      el.signalBadge.textContent = "WAIT";
+      el.signalBadge.className = "signal-badge wait";
+      el.stage.classList.remove("flash-go", "flash-fake", "shake");
+      updateControls();
+      updateHUD();
+      log("Round " + state.round, `Clue A: ${state.clueA} · Clue B: ${state.clueB} · Lock: ${state.lock}`);
+      clearInterval(state.loop);
+      state.loop = setInterval(tick, 100);
+    }
+
+    function tick() {
+      if (state.phase === "lobby") return;
+      state.timer -= 100;
+
+      const cfg = difficultyConfig();
+      if (state.phase === "prep" && state.timer <= 0) {
+        startSignalPhase();
+      } else if (state.phase === "signal" && state.timer <= 0) {
+        resolveSignalTimeout();
+      } else if (state.phase === "resolve" && state.timer <= 0) {
+        continueAfterResolve();
+      }
+      updateHUD();
+    }
+
+    function startSignalPhase() {
+      state.phase = "signal";
+      state.signalType = Math.random() < difficultyConfig().trapChance ? "fake" : "go";
+      state.signalOpen = true;
+      state.timer = difficultyConfig().reaction;
+      state.timerMax = state.timer;
+      el.stage.classList.remove("flash-go", "flash-fake");
+      el.stage.classList.add(state.signalType === "go" ? "flash-go" : "flash-fake");
+      el.signalBadge.className = `signal-badge ${state.signalType === "go" ? "go" : "fake"}`;
+      el.signalBadge.textContent = state.signalType === "go" ? "GO" : "FAKE";
+      el.messageTitle.textContent = state.signalType === "go" ? "GO!" : "FALSE SIGNAL!";
+      el.messageBody.textContent = state.signalType === "go" ? "Someone must click GO before the timer ends." : "Do not hit the red button. You can still reveal a hint instead.";
+      log("Signal", state.signalType === "go" ? "A real reaction window opened." : "A fake signal appeared. Watch out.");
+      updateControls();
+    }
+
+    function resolveSignalTimeout() {
+      state.signalOpen = false;
+      state.phase = "resolve";
+      state.timer = 1200;
+      state.timerMax = 1200;
+      el.signalBadge.className = "signal-badge wait";
+      el.signalBadge.textContent = "LOCKED";
+      el.stage.classList.remove("flash-go", "flash-fake");
+      if (state.signalType === "go") {
+        failEvent("The GO window expired.");
+      } else {
+        successEvent("The fake signal expired safely.");
+      }
+      updateControls();
+    }
+
+    function continueAfterResolve() {
+      if (state.completed >= state.objective) {
+        finishGame(true);
+        return;
+      }
+      if (state.round >= state.totalRounds) {
+        finishGame(state.completed >= Math.ceil(state.objective / 2));
+        return;
+      }
+      state.round += 1;
+      state.activePlayer = (state.activePlayer + 1) % state.players.length;
+      nextRound();
+    }
+
+    function successEvent(text) {
+      state.completed += 1;
+      state.scores[state.activePlayer] += 1;
+      el.messageTitle.textContent = "Unlocked";
+      el.messageBody.textContent = text + " Team progress increased.";
+      log("Success", `${state.players[state.activePlayer]} helped the team progress.`);
+    }
+
+    function failEvent(text) {
+      state.scores[state.activePlayer] = Math.max(0, state.scores[state.activePlayer] - difficultyConfig().penalty);
+      el.stage.classList.add("shake");
+      el.messageTitle.textContent = "Missed";
+      el.messageBody.textContent = text + " The room shudders and the next round gets tighter.";
+      log("Penalty", `${state.players[state.activePlayer]} missed the correct window.`);
+    }
+
+    function finishGame(win) {
+      clearInterval(state.loop);
+      state.phase = "ended";
+      state.signalOpen = false;
+      updateControls();
+      el.signalBadge.className = win ? "signal-badge go" : "signal-badge fake";
+      el.signalBadge.textContent = win ? "ESCAPE" : "LOCKDOWN";
+      el.stateText.textContent = win ? "Clear" : "Lost";
+      el.timerText.textContent = "--";
+      el.objectiveText.textContent = `${state.completed}/${state.objective}`;
+      el.messageTitle.textContent = win ? "Room escaped" : "Room locked";
+      el.messageBody.textContent = win ? "The team survived the chaos. Reset and try a faster clear." : "The room beat the team. Try again with tighter communication.";
+      log("Game Over", win ? "The team escaped the room." : "The room won this time.");
+      state.progress = 0;
+    }
+
+    function handleGo() {
+      if (!state.signalOpen || state.phase !== "signal") return;
+      if (state.signalType !== "go") {
+        state.signalOpen = false;
+        state.phase = "resolve";
+        state.timer = 900;
+        state.timerMax = 900;
+        failEvent("Wrong signal. That was a trap.");
+        el.signalBadge.className = "signal-badge fake";
+        el.signalBadge.textContent = "TRAP";
+        updateControls();
+        return;
+      }
+      const reaction = Math.max(0, state.timerMax - state.timer);
+      state.signalOpen = false;
+      state.phase = "resolve";
+      state.timer = 900;
+      state.timerMax = 900;
+      const bonus = reaction < 500 ? 2 : reaction < 1100 ? 1 : 0;
+      state.completed += 1;
+      state.scores[state.activePlayer] += 1 + bonus;
+      el.signalBadge.className = "signal-badge go";
+      el.signalBadge.textContent = bonus ? "FAST" : "GOOD";
+      el.messageTitle.textContent = bonus ? "Fast unlock!" : "Correct unlock!";
+      el.messageBody.textContent = bonus ? "That was a sharp reaction. The room rewards speed." : "Correct reaction. The room opens a little more.";
+      log("Reaction", `${state.players[state.activePlayer]} hit GO${bonus ? " very fast" : ""}.`);
+      updateControls();
+    }
+
+    function handleTrap() {
+      if (!state.signalOpen || state.phase !== "signal") return;
+      if (state.signalType === "fake") {
+        state.signalOpen = false;
+        state.phase = "resolve";
+        state.timer = 900;
+        state.timerMax = 900;
+        successEvent("You ignored the trap and kept the room stable.");
+        el.signalBadge.className = "signal-badge wait";
+        el.signalBadge.textContent = "DODGED";
+        updateControls();
+        return;
+      }
+      failEvent("You hit the wrong control during a real signal.");
+      state.signalOpen = false;
+      state.phase = "resolve";
+      state.timer = 900;
+      state.timerMax = 900;
+      el.signalBadge.className = "signal-badge fake";
+      el.signalBadge.textContent = "MISFIRE";
+      updateControls();
+    }
+
+    function handleHint() {
+      if (state.phase === "lobby") return;
+      if (state.revealedHint) {
+        log("Hint", "No extra hint available this round.");
+        return;
+      }
+      state.revealedHint = true;
+      const hint = `Hint: combine the first letter of clue A with the last letter of clue B. The lock is ${state.lock}.`;
+      el.messageTitle.textContent = "Hint revealed";
+      el.messageBody.textContent = hint;
+      log("Hint", hint);
+    }
+
+    function skipWave() {
+      if (state.phase === "lobby") return;
+      state.signalOpen = false;
+      state.phase = "resolve";
+      state.timer = 700;
+      state.timerMax = 700;
+      el.signalBadge.className = "signal-badge wait";
+      el.signalBadge.textContent = "SKIP";
+      el.messageTitle.textContent = "Wave skipped";
+      el.messageBody.textContent = "The room fast-forwards to the next moment.";
+      log("Skip", "The current wave was skipped.");
+      updateControls();
+    }
+
+    function resetAll() {
+      clearInterval(state.loop);
+      state.players = [];
+      state.scores = [];
+      state.round = 1;
+      state.totalRounds = 5;
+      state.difficulty = "normal";
+      state.phase = "lobby";
+      state.completed = 0;
+      state.objective = 0;
+      state.signalOpen = false;
+      state.signalType = null;
+      state.lock = null;
+      state.clueA = null;
+      state.clueB = null;
+      state.answer = null;
+      el.stage.classList.remove("flash-go", "flash-fake", "shake");
+      el.stateText.textContent = "Lobby";
+      el.roundText.textContent = "1";
+      el.timerText.textContent = "--";
+      el.objectiveText.textContent = "--";
+      el.signalBadge.className = "signal-badge wait";
+      el.signalBadge.textContent = "WAIT";
+      el.phaseHint.textContent = "Lobby";
+      el.difficultyHint.textContent = "Press Start to generate a new room";
+      el.messageTitle.textContent = "Set up the lobby";
+      el.messageBody.textContent = "Players will get split clues, then a signal appears. Click the right button fast, or the room gets harder.";
+      el.clueA.textContent = "—";
+      el.clueB.textContent = "—";
+      el.lockCode.textContent = "—";
+      resetLog();
+      updatePlayers();
+      updateControls();
+      el.progressBar.style.width = "0%";
+      el.teamProgress.style.width = "0%";
+      el.progressText.textContent = "0 / 0";
+    }
+
+    el.startBtn.addEventListener("click", startGame);
+    el.resetBtn.addEventListener("click", resetAll);
+    el.goBtn.addEventListener("click", handleGo);
+    el.trapBtn.addEventListener("click", handleTrap);
+    el.hintBtn.addEventListener("click", handleHint);
+    el.skipBtn.addEventListener("click", skipWave);
+
+    [el.playerInput, el.difficulty, el.rounds].forEach(node => {
+      node.addEventListener("input", () => {
+        if (state.phase === "lobby") {
+          state.players = parsePlayers();
+          state.scores = state.players.map(() => 0);
+          updatePlayers();
+        }
+      });
+    });
+
+    resetLog();
+    updatePlayers();
+    updateControls();
+    showRoundInfo();
+    updateHUD();
+  </script>
+</body>
+</html>
