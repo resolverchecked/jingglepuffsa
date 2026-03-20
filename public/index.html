@@ -253,7 +253,6 @@
     .grid-chip   { border-radius: 6px; padding: 8px 10px; font-size: 0.78rem; line-height: 1.5; }
     .grid-chip b { display: block; font-size: 0.85rem; margin-bottom: 2px; }
 
-    /* create-room popup */
     .modal-overlay {
       position: fixed;
       inset: 0;
@@ -313,7 +312,7 @@
       <div class="htp-body" id="htp-body">
         <div class="htp-step">
           <div class="htp-num">1</div>
-          <div class="htp-text"><strong>Host creates a room</strong> — pick difficulty and rounds, share the 5-letter code.</div>
+          <div class="htp-text"><strong>Host creates a room</strong> — pick difficulty, mode, and rounds, share the 5-letter code.</div>
         </div>
         <div class="htp-step">
           <div class="htp-num">2</div>
@@ -356,6 +355,11 @@
     <div class="card">
       <h2>CREATE ROOM</h2>
       <input id="host-name" type="text" placeholder="Your name" maxlength="20" />
+      <select id="host-mode">
+        <option value="duel">1v1 / Duel</option>
+        <option value="team">2v2 / Team</option>
+        <option value="ffa" selected>FFA</option>
+      </select>
       <select id="host-difficulty" onchange="updateDiffInfo()">
         <option value="easy">Easy</option>
         <option value="normal" selected>Normal</option>
@@ -397,6 +401,10 @@
       <h2>ROOM CODE</h2>
       <div class="room-code" id="lobby-code"></div>
       <p style="color:#666;font-size:0.8rem;text-align:center;margin-bottom:16px">Share this code with friends</p>
+      <div style="text-align:center;margin-bottom:10px">
+        <span class="mode-badge" id="lobby-mode"></span>
+        <span class="game-diff-badge" id="lobby-diff"></span>
+      </div>
       <h2>PLAYERS</h2>
       <ul class="player-list" id="lobby-players"></ul>
       <div style="margin-top:16px">
@@ -411,53 +419,55 @@
     <div class="card" id="game-card">
       <div>
         <span class="phase-badge phase-prep" id="game-phase-badge">PREP</span>
+        <span class="mode-badge" id="game-mode-badge"></span>
         <span class="game-diff-badge" id="game-diff-badge"></span>
-        <div class="progress-info" style="margin-top:6px">
-          <span id="game-round-info">Round 1 / 5</span>
-          <span id="game-score-info">0 / 5 escaped</span>
+        <div class="progress-info">
+          <span id="game-round-info">Round 1 / 8</span>
+          <span id="game-score-info">0 / 0</span>
         </div>
       </div>
 
       <div class="mod-banner normal" id="mod-banner">
-        <span class="mod-icon" id="mod-icon"></span>
-        <div><div id="mod-title"></div><div class="mod-desc" id="mod-desc"></div></div>
+        <span id="mod-icon"></span>
+        <div>
+          <div id="mod-title"></div>
+          <div style="font-size:.75rem;font-weight:normal;opacity:.85" id="mod-desc"></div>
+        </div>
       </div>
 
-      <div class="escalation-row">
+      <div class="team-box" id="team-box" style="display:none"></div>
+
+      <div class="progress-info" style="margin-top:8px">
         <span>PRESSURE</span>
-        <div class="esc-bar"><div class="esc-fill" id="esc-fill"></div></div>
-        <span id="esc-pct" style="min-width:30px;text-align:right">0%</span>
+        <span id="esc-pct">0%</span>
       </div>
       <div class="timer-bar"><div class="timer-fill" id="timer-fill"></div></div>
 
-      <div class="reveal-flash" id="reveal-flash"></div>
+      <div class="held-strip" id="held-strip"></div>
 
-      <div class="held-powerup-strip" id="held-strip"></div>
-
-      <div class="real-signal-hint" id="rsh">REAL SIGNAL: <span class="rsh-val" id="rsh-val"></span></div>
       <div class="message-box" id="game-message">Study the clues.</div>
 
       <div id="powerup-card" style="display:none"></div>
 
-      <div class="clue-legend" id="clue-legend">
-        <div class="cl-row">
-          <div class="cl-group"><div class="cl-title">COLOUR</div><span class="go-clue">WARM→GO</span> · <span class="fake-clue">COOL→FAKE</span></div>
-          <div class="cl-group"><div class="cl-title">WORD</div><span class="go-clue">ODD→GO</span> · <span class="fake-clue">EVEN→FAKE</span></div>
-          <div class="cl-group"><div class="cl-title">LOCK</div><span class="go-clue">ODD→GO</span> · <span class="fake-clue">EVEN→FAKE</span></div>
+      <div class="clues">
+        <div class="clue" id="clue-a-tile">
+          <div class="clue-label">SIGNAL A</div>
+          <div class="clue-value" id="clue-a">-</div>
+        </div>
+        <div class="clue" id="clue-b-tile">
+          <div class="clue-label">SIGNAL B</div>
+          <div class="clue-value" id="clue-b">-</div>
         </div>
       </div>
 
-      <div class="clues">
-        <div class="clue" id="clue-a-tile"><div class="clue-label">SIGNAL A</div><div class="clue-value" id="clue-a">-</div></div>
-        <div class="clue" id="clue-b-tile"><div class="clue-label">SIGNAL B</div><div class="clue-value" id="clue-b">-</div></div>
-      </div>
       <div class="lock-tile" id="lock-tile">
         <div class="clue-label">LOCK CODE</div>
         <div class="lock-code" id="lock-code">???</div>
         <div class="lock-hint" id="lock-hint"></div>
       </div>
 
-      <div class="double-counter" id="double-counter" style="display:none">○ ○</div>
+      <div class="double-counter" id="double-counter">○ ○</div>
+
       <div class="react-buttons" id="react-buttons" style="display:none">
         <button class="btn-go" id="btn-left" onclick="react('go')">GO</button>
         <button class="btn-fake" id="btn-right" onclick="react('fake')">FAKE</button>
@@ -466,7 +476,7 @@
 
     <div class="card">
       <h2>PLAYERS</h2>
-      <ul class="player-list" id="scoreboard"></ul>
+      <ul class="scoreboard" id="scoreboard"></ul>
       <h2 style="margin-top:16px">LIVE FEED</h2>
       <div class="log-list" id="log-list"></div>
     </div>
@@ -474,11 +484,13 @@
 
   <div id="screen-end" class="screen">
     <div class="card" style="text-align:center">
-      <div id="end-result" style="font-size:2rem;font-weight:bold;margin-bottom:16px"></div>
-      <div id="end-message" style="color:#888;margin-bottom:24px"></div>
+      <div id="end-result" style="font-size:2rem;font-weight:bold;margin-bottom:14px"></div>
+      <div id="end-message" style="color:#888;margin-bottom:22px"></div>
       <h2 style="margin-bottom:12px">FINAL SCORES</h2>
-      <ul class="player-list" id="end-scoreboard"></ul>
-      <div style="margin-top:24px"><button class="btn-primary" onclick="goHome()">PLAY AGAIN</button></div>
+      <ul class="scoreboard" id="end-scoreboard"></ul>
+      <div style="margin-top:22px">
+        <button class="btn-primary" onclick="goHome()">PLAY AGAIN</button>
+      </div>
     </div>
   </div>
 </div>
@@ -504,31 +516,38 @@ const WARM_COLORS = new Set(["RED","ORANGE","YELLOW","WHITE"]);
 const COOL_COLORS = new Set(["BLUE","GREEN","PURPLE","CYAN"]);
 
 const DIFF = {
-  easy:       { prep:"6.0s→3.3s", sig:"2.6s→1.4s", obj:"4 escapes",  fake:"22%→50%", cls:"diff-easy",       label:"EASY",       desc:"Generous windows." },
-  normal:     { prep:"4.5s→2.5s", sig:"2.1s→1.1s", obj:"5 escapes",  fake:"33%→60%", cls:"diff-normal",     label:"NORMAL",     desc:"Balanced. Harder by round 8." },
-  hard:       { prep:"3.2s→1.8s", sig:"1.5s→0.8s", obj:"7 escapes",  fake:"45%→70%", cls:"diff-hard",       label:"HARD",       desc:"Already tough. Relentless." },
-  impossible: { prep:"2.0s→0.6s", sig:"0.8s→0.3s", obj:"10 escapes", fake:"60%→88%", cls:"diff-impossible", label:"IMPOSSIBLE", desc:"Sub-second. Good luck." },
+  easy: { cls: "diff-easy", label: "EASY", desc: "Big windows. Good for chill matches.", prep: "8.5s → ~7s", sig: "4.8s → ~4s", obj: "8 HP" },
+  normal: { cls: "diff-normal", label: "NORMAL", desc: "Balanced competitive pacing.", prep: "7.6s → ~6s", sig: "4.2s → ~3.4s", obj: "7 HP" },
+  hard: { cls: "diff-hard", label: "HARD", desc: "Faster and much more punishing.", prep: "6.5s → ~5s", sig: "3.5s → ~2.8s", obj: "6 HP" },
+  impossible: { cls: "diff-impossible", label: "IMPOSSIBLE", desc: "Still playable, just brutal.", prep: "5.5s → ~4.5s", sig: "2.9s → ~2.2s", obj: "5 HP" },
 };
 
-const MODS = {
-  normal:   { cls:"normal",   icon:"",   title:"NORMAL ROUND", desc:"Standard GO / FAKE. Read the clues." },
-  inverted: { cls:"inverted", icon:"⚠",  title:"INVERTED",      desc:"Signal LIES. Clues still tell the truth!" },
-  bomb:     { cls:"bomb",     icon:"💣", title:"BOMB ROUND",    desc:"Press DEFUSE before it explodes." },
-  double:   { cls:"double",   icon:"⚡", title:"DOUBLE HIT",    desc:"Hit GO twice fast." },
+const MODE = {
+  duel: { cls: "mode-duel", label: "1v1 DUEL" },
+  team: { cls: "mode-team", label: "2v2 TEAM" },
+  ffa: { cls: "mode-ffa", label: "FFA" },
 };
 
 const PU_META = {
-  SHIELD: { icon: "🛡", name: "SHIELD",  desc: "Blocks your next penalty if you react wrong." },
-  DOUBLE: { icon: "✕2", name: "DOUBLE",  desc: "Doubles your points on next correct reaction." },
-  BOOST:  { icon: "⚡", name: "BOOST",   desc: "Adds +700ms to the signal window for everyone!" },
-  REVEAL: { icon: "👁", name: "REVEAL",  desc: "Privately tells you the real signal type." },
+  SHIELD: { icon: "🛡", name: "SHIELD", desc: "Blocks your next wrong penalty." },
+  DOUBLE: { icon: "✕2", name: "DOUBLE", desc: "Doubles your next correct score." },
+  BOOST: { icon: "⚡", name: "BOOST", desc: "Adds more signal time to this round." },
+  REVEAL: { icon: "👁", name: "REVEAL", desc: "Privately tells you the real signal." },
 };
 
-let myCode = null, mySocketId = null, timerInterval = null, lastPhase = null, lastMessage = null;
+let myCode = null;
+let mySocketId = null;
+let timerInterval = null;
+let lastPhase = null;
+let lastMessage = null;
 let myRevealSignal = null;
 let pendingCreateRoom = null;
 
-let audioCtx = null, masterGain = null, soundOn = true, droneNodes = [], pulseInterval = null;
+let audioCtx = null;
+let masterGain = null;
+let soundOn = true;
+let droneNodes = [];
+let pulseInterval = null;
 
 function addLog(title, msg, cls = "") {
   const el = document.createElement("div");
@@ -602,19 +621,19 @@ function stopPulse()  { if (pulseInterval) { clearInterval(pulseInterval); pulse
 function setAudioPhase(phase, diff, modifier) {
   if (!audioCtx) return; stopPulse();
   if (phase === "prep") {
-    const spd = modifier === "bomb" ? 500 : modifier === "double" ? 400 : { easy:1200,normal:900,hard:700,impossible:450 }[diff] ?? 900;
+    const spd = modifier === "bomb" ? 500 : modifier === "doublehit" ? 400 : { easy:1300,normal:1000,hard:800,impossible:550 }[diff] ?? 1000;
     pulseInterval = setInterval(() => note(modifier === "bomb" ? 80 : 110, "sine", 0.18, 0.07), spd);
   }
   if (phase === "signal") {
     if (modifier === "bomb") {
       note(200,"square",0.1,0.2); note(150,"square",0.1,0.18,0.08);
-      pulseInterval = setInterval(() => { note(180,"sawtooth",0.12,0.14); note(120,"sawtooth",0.1,0.1,0.06); }, 200);
-    } else if (modifier === "double") {
+      pulseInterval = setInterval(() => { note(180,"sawtooth",0.12,0.14); note(120,"sawtooth",0.1,0.1,0.06); }, 220);
+    } else if (modifier === "doublehit") {
       note(660,"square",0.06,0.2); note(880,"square",0.06,0.18,0.05);
-      pulseInterval = setInterval(() => { note(330,"sawtooth",0.08,0.12); note(440,"sawtooth",0.06,0.10,0.04); }, 160);
+      pulseInterval = setInterval(() => { note(330,"sawtooth",0.08,0.12); note(440,"sawtooth",0.06,0.1,0.04); }, 170);
     } else {
       note(880,"square",0.08,0.15); note(1100,"square",0.08,0.12,0.05);
-      const spd = { easy:350,normal:280,hard:200,impossible:120 }[diff] ?? 280;
+      const spd = { easy:420,normal:320,hard:240,impossible:160 }[diff] ?? 320;
       pulseInterval = setInterval(() => { note(220,"sawtooth",0.1,0.1); note(330,"sawtooth",0.08,0.08,0.05); }, spd);
     }
   }
@@ -629,7 +648,7 @@ function playPowerup() { if (!audioCtx) return; note(880,"sine",0.1,0.2); note(1
 function playReact(ok) { ok ? (note(880,"sine",0.15,0.2), note(1320,"sine",0.15,0.18,0.1)) : (playMiss(), triggerShake()); }
 
 function toggleHTP() {
-  const body  = document.getElementById("htp-body");
+  const body = document.getElementById("htp-body");
   const arrow = document.getElementById("htp-arrow");
   body.classList.toggle("open");
   arrow.textContent = body.classList.contains("open") ? "▲" : "▼";
@@ -665,15 +684,22 @@ function openCreatePopup() {
 
   const name = document.getElementById("host-name").value.trim() || "Host";
   const diff = document.getElementById("host-difficulty").value;
+  const mode = document.getElementById("host-mode").value;
   const rounds = parseInt(document.getElementById("host-rounds").value, 10);
 
   pendingCreateRoom = {
     name,
+    mode,
     difficulty: diff,
     totalRounds: rounds
   };
 
-  const modeLabel = "Normal";
+  const modeLabel = {
+    duel: "1v1 / Duel",
+    team: "2v2 / Team",
+    ffa: "FFA"
+  }[mode] || mode.toUpperCase();
+
   const diffLabel = {
     easy: "Easy",
     normal: "Normal",
@@ -699,7 +725,7 @@ function confirmCreateRoom() {
   document.getElementById("create-error").textContent = "";
   document.getElementById("create-modal").style.display = "none";
 
-  socket.emit("createRoom", pendingCreateRoom, res => {
+  socket.emit("createRoom", pendingCreateRoom, (res) => {
     if (!res.ok) {
       document.getElementById("create-error").textContent = res.error;
       return;
@@ -709,10 +735,6 @@ function confirmCreateRoom() {
   });
 
   pendingCreateRoom = null;
-}
-
-function createRoom() {
-  openCreatePopup();
 }
 
 function joinRoom() {
@@ -730,46 +752,189 @@ function joinRoom() {
 function showLobby(state) {
   showScreen("screen-lobby"); stopPulse();
   document.getElementById("lobby-code").textContent = state.code;
+  document.getElementById("lobby-mode").className = `mode-badge ${MODE[state.mode]?.cls || "mode-duel"}`;
+  document.getElementById("lobby-mode").textContent = MODE[state.mode]?.label || state.mode.toUpperCase();
+  const di = DIFF[state.difficulty] || DIFF.normal;
+  document.getElementById("lobby-diff").className = `game-diff-badge ${di.cls}`;
+  document.getElementById("lobby-diff").textContent = di.label;
   renderPlayers("lobby-players", state);
   const isHost = state.hostId === mySocketId;
-  document.getElementById("start-btn").style.display   = isHost ? "block" : "none";
-  document.getElementById("waiting-msg").style.display = isHost ? "none"  : "block";
+  document.getElementById("start-btn").style.display = isHost ? "block" : "none";
+  document.getElementById("waiting-msg").style.display = isHost ? "none" : "block";
 }
 
 function startGame() {
   document.getElementById("lobby-error").textContent = "";
-  socket.emit("startGame", { code: myCode }, res => {
+  socket.emit("startGame", { code: myCode }, (res) => {
     if (res && !res.ok) document.getElementById("lobby-error").textContent = res.error;
   });
+}
+
+function clueAClass(clueA) {
+  if (!clueA) return "";
+  const color = clueA.split(" ")[0];
+  if (WARM_COLORS.has(color)) return "warm";
+  if (COOL_COLORS.has(color)) return "cool";
+  return "bomb-clue";
+}
+
+function clueBSignal(word) {
+  return word && word.length % 2 === 1 ? "go" : "fake";
+}
+
+function lockSignal(lock) {
+  if (!lock || lock === "!!!") return "bomb";
+  const n = parseInt(lock, 10);
+  return Number.isNaN(n) ? "bomb" : (n % 2 === 1 ? "go" : "fake");
+}
+
+function renderPowerupCard(state) {
+  const container = document.getElementById("powerup-card");
+  const pu = state.roundPowerup;
+  if (!pu || state.phase === "signal" || state.phase === "resolve") {
+    container.style.display = "none";
+    return;
+  }
+
+  const meta = PU_META[pu.type] || { icon: "?", name: pu.type, desc: "" };
+  const claimed = !!pu.claimedBy;
+  const claimedByMe = pu.claimedBy === mySocketId;
+
+  container.style.display = "block";
+
+  if (claimed) {
+    const who = claimedByMe ? "You" : (pu.claimedByName || "Someone");
+    container.innerHTML = `
+      <div class="powerup-card claimed">
+        <div class="pu-icon">${meta.icon}</div>
+        <div class="pu-info">
+          <div class="pu-name">${meta.name}</div>
+          <div class="pu-claimed-by">${who} claimed this powerup.</div>
+        </div>
+      </div>
+    `;
+  } else {
+    container.innerHTML = `
+      <div class="powerup-card">
+        <div class="pu-icon">${meta.icon}</div>
+        <div class="pu-info">
+          <div class="pu-name">POWERUP: ${meta.name}</div>
+          <div class="pu-desc">${meta.desc}</div>
+        </div>
+        <button class="btn-claim" onclick="claimPowerup()">CLAIM</button>
+      </div>
+    `;
+  }
+}
+
+function claimPowerup() {
+  socket.emit("claimPowerup", { code: myCode }, (res) => {
+    if (res?.ok) {
+      playPowerup();
+      addLog("POWERUP", `You claimed ${res.type}!`, "log-pu");
+    }
+  });
+}
+
+function renderPlayers(listId, state) {
+  const el = document.getElementById(listId);
+  if (!el) return;
+
+  el.innerHTML = [...state.players]
+    .sort((a, b) => b.score - a.score || b.hp - a.hp)
+    .map((p) => {
+      const pBadge = p.heldPowerup ? `<span class="pu-badge pu-${p.heldPowerup.toLowerCase()}">${PU_META[p.heldPowerup]?.icon || p.heldPowerup}</span>` : "";
+      const team = state.mode === "team" ? `<span class="team">Team ${p.team}</span>` : "";
+      return `<li class="${p.id === state.hostId ? "host" : ""}">
+        <span>${p.id === state.hostId ? "★ " : ""}${p.name}${team}${pBadge}</span>
+        <span class="score">${p.score} pts <span class="hp">HP ${p.hp}/${p.maxHp}</span></span>
+      </li>`;
+    }).join("");
+}
+
+function updateTimer(state) {
+  clearInterval(timerInterval);
+  const fill = document.getElementById("timer-fill");
+  if (!state.stageEndsAt) {
+    fill.style.width = "0%";
+    return;
+  }
+  const totalMs = state.stageTotalMs || 4500;
+  const mod = state.roundModifier || "normal";
+
+  function tick() {
+    const rem = state.stageEndsAt - Date.now();
+    const pct = Math.max(0, Math.min(100, (rem / totalMs) * 100));
+    fill.style.width = pct + "%";
+    fill.className = "timer-fill" + (mod === "bomb" ? " bomb" : "") + (pct < 30 ? " urgent" : "");
+    document.getElementById("esc-pct").textContent = Math.round(100 - pct) + "%";
+    if (rem <= 0) clearInterval(timerInterval);
+  }
+
+  tick();
+  timerInterval = setInterval(tick, 100);
 }
 
 function showGame(state) {
   showScreen("screen-game");
 
-  const phaseMap = { prep:["prep","PREP"], signal:["signal","SIGNAL"], resolve:["resolve","RESOLVE"], starting:["lobby","STARTING"] };
-  const [pCls, pLabel] = phaseMap[state.phase] || ["lobby", state.phase.toUpperCase()];
-  const badge = document.getElementById("game-phase-badge");
-  badge.className = `phase-badge phase-${pCls}`; badge.textContent = pLabel;
+  const phaseMap = {
+    prep: ["prep", "PREP"],
+    signal: ["signal", "SIGNAL"],
+    resolve: ["resolve", "RESOLVE"],
+    starting: ["lobby", "STARTING"],
+  };
 
-  const diff = state.difficulty || "normal";
-  const di   = DIFF[diff] || DIFF.normal;
-  const db   = document.getElementById("game-diff-badge");
-  db.className = `game-diff-badge ${di.cls}`; db.textContent = di.label;
+  const [pCls, pLabel] = phaseMap[state.phase] || ["lobby", String(state.phase || "lobby").toUpperCase()];
+  const badge = document.getElementById("game-phase-badge");
+  badge.className = `phase-badge phase-${pCls}`;
+  badge.textContent = pLabel;
+
+  const mode = MODE[state.mode] || MODE.duel;
+  const di = DIFF[state.difficulty] || DIFF.normal;
+  const mBadge = document.getElementById("game-mode-badge");
+  mBadge.className = `mode-badge ${mode.cls}`;
+  mBadge.textContent = mode.label;
+
+  const db = document.getElementById("game-diff-badge");
+  db.className = `game-diff-badge ${di.cls}`;
+  db.textContent = di.label;
 
   const modifier = state.roundModifier || "normal";
-  const mod      = MODS[modifier] || MODS.normal;
-  const banner   = document.getElementById("mod-banner");
-  banner.className = `mod-banner ${mod.cls}`;
-  document.getElementById("mod-icon").textContent  = mod.icon;
-  document.getElementById("mod-title").textContent = mod.title;
-  document.getElementById("mod-desc").textContent  = mod.desc;
-  document.getElementById("game-card").className   = "card" + (modifier !== "normal" ? ` mod-${modifier}` : "");
+  const mod = {
+    normal: { cls: "normal", icon: "", title: "NORMAL ROUND", desc: "Read the clues." },
+    inverted: { cls: "inverted", icon: "⚠", title: "INVERTED", desc: "The signal lies. Clues are still true." },
+    bomb: { cls: "bomb", icon: "💣", title: "BOMB ROUND", desc: "Press DEFUSE when the signal fires." },
+    doublehit: { cls: "doublehit", icon: "⚡", title: "DOUBLE HIT", desc: "Hit GO twice before time runs out." },
+  }[modifier] || { cls: "normal", icon: "", title: "NORMAL ROUND", desc: "Read the clues." };
 
-  const escPct = Math.round(Math.min(100, ((state.round-1) / Math.max(1,state.totalRounds-1)) * 100));
-  document.getElementById("esc-fill").style.width = escPct + "%";
-  document.getElementById("esc-pct").textContent  = escPct + "%";
+  const banner = document.getElementById("mod-banner");
+  banner.className = `mod-banner show ${mod.cls}`;
+  document.getElementById("mod-icon").textContent = mod.icon;
+  document.getElementById("mod-title").textContent = mod.title;
+  document.getElementById("mod-desc").textContent = mod.desc;
+
   document.getElementById("game-round-info").textContent = `Round ${state.round} / ${state.totalRounds}`;
-  document.getElementById("game-score-info").textContent = `${state.completed} / ${state.objective} escaped`;
+  document.getElementById("game-score-info").textContent = state.mode === "team" && state.teams
+    ? `${state.teams[0]?.score || 0} vs ${state.teams[1]?.score || 0}`
+    : `${state.players.reduce((a, p) => a + p.score, 0)} total pts`;
+
+  const teamBox = document.getElementById("team-box");
+  if (state.mode === "team" && state.teams?.length) {
+    teamBox.style.display = "block";
+    teamBox.innerHTML = state.teams.map((t, idx) => {
+      const pct = t.maxHp ? Math.max(0, (t.hp / t.maxHp) * 100) : 0;
+      return `
+        <div style="margin-bottom:${idx === 0 ? 10 : 0}px">
+          <div class="team-row"><span>${t.name}</span><span>${t.score} pts · HP ${t.hp}/${t.maxHp}</span></div>
+          <div class="bar"><div class="fill ${idx === 1 ? "b" : ""}" style="width:${pct}%"></div></div>
+        </div>
+      `;
+    }).join("");
+  } else {
+    teamBox.style.display = "none";
+    teamBox.innerHTML = "";
+  }
 
   const rsh = document.getElementById("rsh");
   if (modifier === "inverted" && state.phase === "prep" && state.realSignal) {
@@ -779,16 +944,19 @@ function showGame(state) {
     rv.className   = "rsh-val " + (state.realSignal === "go" ? "rsh-go" : "rsh-fake");
   } else { rsh.className = "real-signal-hint"; }
 
-  const revealFlash = document.getElementById("reveal-flash");
   if (state.phase !== "prep") {
+    const revealFlash = document.getElementById("reveal-flash");
     if (myRevealSignal && state.phase === "resolve") { myRevealSignal = null; revealFlash.className = "reveal-flash"; }
   }
-  if (state.phase === "prep") { myRevealSignal = null; revealFlash.className = "reveal-flash"; }
+  if (state.phase === "prep") {
+    myRevealSignal = null;
+    document.getElementById("reveal-flash").className = "reveal-flash";
+  }
 
   const msgEl = document.getElementById("game-message");
   msgEl.textContent = state.message || ""; msgEl.className = "message-box";
   const msg = state.message || "";
-  if (msg === "GO!" || msg === "HIT TWICE! GO GO!") msgEl.classList.add(modifier === "double" ? "message-double" : "message-go");
+  if (msg === "GO!" || msg === "HIT TWICE! GO GO!") msgEl.classList.add(modifier === "doublehit" ? "message-double" : "message-go");
   if (msg === "FAKE SIGNAL!") msgEl.classList.add("message-fake");
   if (msg === "💣 DEFUSE IT!") msgEl.classList.add("message-bomb");
 
@@ -831,30 +999,48 @@ function showGame(state) {
   } else { heldStrip.className = "held-powerup-strip"; }
 
   const reactRow = document.getElementById("react-buttons");
-  const open     = state.phase === "signal" && state.signalOpen;
+  const open = state.phase === "signal" && state.signalOpen;
   reactRow.style.display = open ? "flex" : "none";
+  const btnLeft = document.getElementById("btn-left");
+  const btnRight = document.getElementById("btn-right");
   const dblCounter = document.getElementById("double-counter");
+
   if (open) {
     if (modifier === "bomb") {
-      const bl = document.getElementById("btn-left"); const br = document.getElementById("btn-right");
-      bl.className="btn-defuse"; bl.textContent="💣 DEFUSE"; bl.onclick=()=>react("bomb");
-      br.style.display="none"; dblCounter.style.display="none";
-    } else if (modifier === "double") {
-      const bl = document.getElementById("btn-left"); const br = document.getElementById("btn-right");
-      bl.className="btn-double-hit"; bl.textContent="⚡ HIT"; bl.onclick=()=>react("go");
-      br.style.display="none";
-      dblCounter.style.display="block";
-      dblCounter.textContent = (state.doubleHit||0) >= 1 ? "● ○" : "○ ○";
+      btnLeft.className = "btn-defuse";
+      btnLeft.textContent = "💣 DEFUSE";
+      btnLeft.onclick = () => react("bomb");
+      btnRight.style.display = "none";
+      dblCounter.style.display = "none";
+    } else if (modifier === "doublehit") {
+      btnLeft.className = "btn-double-hit";
+      btnLeft.textContent = "⚡ HIT";
+      btnLeft.onclick = () => react("go");
+      btnRight.style.display = "none";
+      dblCounter.style.display = "block";
+      dblCounter.textContent = (state.doubleHit || 0) >= 1 ? "● ○" : "○ ○";
     } else {
-      const bl = document.getElementById("btn-left"); const br = document.getElementById("btn-right");
-      bl.className="btn-go"; bl.textContent="GO"; bl.onclick=()=>react("go");
-      br.className="btn-fake"; br.textContent="FAKE"; br.onclick=()=>react("fake");
-      br.style.display=""; dblCounter.style.display="none";
+      btnLeft.className = "btn-go";
+      btnLeft.textContent = "GO";
+      btnLeft.onclick = () => react("go");
+      btnRight.style.display = "";
+      btnRight.className = "btn-fake";
+      btnRight.textContent = "FAKE";
+      btnRight.onclick = () => react("fake");
+      dblCounter.style.display = "none";
     }
-  } else { document.getElementById("btn-right").style.display=""; dblCounter.style.display="none"; }
+  } else {
+    btnRight.style.display = "";
+    dblCounter.style.display = "none";
+  }
 
   document.getElementById("timer-fill").className = "timer-fill" + (modifier === "bomb" ? " bomb" : "");
-  if (state.phase !== lastPhase) { setAudioPhase(state.phase, diff, modifier); lastPhase = state.phase; }
+
+  if (state.phase !== lastPhase) {
+    setAudioPhase(state.phase, state.difficulty || "normal", modifier);
+    lastPhase = state.phase;
+  }
+
   updateTimer(state);
   renderPlayers("scoreboard", state);
 
@@ -864,81 +1050,18 @@ function showGame(state) {
   }
 }
 
-function renderPowerupCard(state) {
-  const container = document.getElementById("powerup-card");
-  const pu = state.roundPowerup;
-  if (!pu || state.phase === "signal" || state.phase === "resolve") {
-    container.style.display = "none"; return;
-  }
-  const meta = PU_META[pu.type] || { icon:"?", name: pu.type, desc:"" };
-  const claimed = !!pu.claimedBy;
-  const claimedByMe = pu.claimedBy === mySocketId;
-  container.style.display = "block";
-
-  if (claimed) {
-    const who = claimedByMe ? "You" : (pu.claimedByName || "Someone");
-    container.innerHTML = `
-      <div class="powerup-card claimed">
-        <div class="pu-icon">${meta.icon}</div>
-        <div class="pu-info">
-          <div class="pu-name">${meta.name}</div>
-          <div class="pu-claimed-by">${who} claimed this powerup.</div>
-        </div>
-      </div>`;
-  } else {
-    container.innerHTML = `
-      <div class="powerup-card">
-        <div class="pu-icon">${meta.icon}</div>
-        <div class="pu-info">
-          <div class="pu-name">POWERUP: ${meta.name}</div>
-          <div class="pu-desc">${meta.desc}</div>
-        </div>
-        <button class="btn-claim" onclick="claimPowerup()">CLAIM</button>
-      </div>`;
-  }
-}
-
-function claimPowerup() {
-  socket.emit("claimPowerup", { code: myCode }, res => {
-    if (res?.ok) { playPowerup(); addLog("POWERUP", `You claimed ${res.type}!`, "log-pu"); }
-  });
-}
-
-function renderPlayers(listId, state) {
-  const el = document.getElementById(listId);
-  if (!el) return;
-  el.innerHTML = [...state.players].sort((a,b) => b.score - a.score).map(p => {
-    const pBadge = p.heldPowerup ? `<span class="pu-badge pu-${p.heldPowerup.toLowerCase()}">${PU_META[p.heldPowerup]?.icon || p.heldPowerup}</span>` : "";
-    return `<li class="${p.id === state.hostId ? "host" : ""}">
-      <span>${p.id === state.hostId ? "★ " : ""}${p.name}${pBadge}</span>
-      <span class="score">${p.score} pts</span>
-    </li>`;
-  }).join("");
-}
-
-function updateTimer(state) {
-  clearInterval(timerInterval);
-  const fill = document.getElementById("timer-fill");
-  if (!state.stageEndsAt) { fill.style.width = "0%"; return; }
-  const totalMs = state.stageTotalMs || 4500;
-  const mod     = state.roundModifier || "normal";
-  function tick() {
-    const rem = state.stageEndsAt - Date.now();
-    const pct = Math.max(0, Math.min(100, (rem / totalMs) * 100));
-    fill.style.width = pct + "%";
-    fill.className = "timer-fill" + (mod === "bomb" ? " bomb" : "") + (pct < 30 ? " urgent" : "");
-    if (rem <= 0) clearInterval(timerInterval);
-  }
-  tick(); timerInterval = setInterval(tick, 100);
-}
-
 function react(type) {
   socket.emit("reaction", { code: myCode, type }, res => {
     if (!res) return;
-    if (res.partial) { playPartial(); return; }
+    if (res.partial) {
+      playPartial();
+      return;
+    }
     if (type === "bomb") playDefuse();
-    else { if (audioCtx) playReact(res.ok !== false); else if (res.ok === false) triggerShake(); }
-    document.getElementById("react-buttons").style.display = "none";
+    else {
+      if (audioCtx) playReact(res.ok !== false);
+      else if (res.ok === false) triggerShake();
+    }
     if (res.ok === false && !res.shielded) triggerShake();
   });
 }
@@ -947,7 +1070,7 @@ function showEnd(state) {
   showScreen("screen-end"); clearInterval(timerInterval); stopPulse();
   lastPhase = null; lastMessage = null; myRevealSignal = null;
   const won = state.message === "Room escaped.";
-  const r   = document.getElementById("end-result");
+  const r = document.getElementById("end-result");
   r.textContent = won ? "ESCAPED!" : "LOCKED OUT"; r.style.color = won ? "#00ffcc" : "#ff4466";
   document.getElementById("end-message").textContent = state.message || "";
   document.getElementById("end-scoreboard").innerHTML =
@@ -961,20 +1084,6 @@ function goHome() {
   myCode = null; clearInterval(timerInterval); stopPulse();
   lastPhase = null; lastMessage = null; myRevealSignal = null;
   showScreen("screen-home");
-}
-
-function clueAClass(clueA) {
-  if (!clueA) return "";
-  const color = clueA.split(" ")[0];
-  if (WARM_COLORS.has(color)) return "warm";
-  if (COOL_COLORS.has(color)) return "cool";
-  return "bomb-clue";
-}
-function clueBSignal(word) { return word && word.length % 2 === 1 ? "go" : "fake"; }
-function lockSignal(lock) {
-  if (!lock || lock === "!!!") return "bomb";
-  const n = parseInt(lock, 10);
-  return isNaN(n) ? "bomb" : (n % 2 === 1 ? "go" : "fake");
 }
 
 updateDiffInfo();
