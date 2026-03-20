@@ -9,8 +9,12 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: 'Courier New', monospace;
-      background: #0a0a0f; color: #e0e0e0;
-      min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      background: #0a0a0f;
+      color: #e0e0e0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
 
     @keyframes shake {
@@ -33,191 +37,214 @@
       40%  { transform: scale(1.06); }
       100% { transform: scale(1); }
     }
+    @keyframes bomb-pulse { from { opacity:1; } to { opacity:0.5; } }
+
     .shake      { animation: shake 0.55s ease-out; }
     .flash-miss { animation: flash-red 0.55s ease-out; }
 
-    #app { width: 100%; max-width: 520px; padding: 20px; }
-    h1   { text-align: center; font-size: 2rem; color: #00ffcc; letter-spacing: 4px; margin-bottom: 4px; }
-    .subtitle { text-align: center; color: #888; font-size: 0.8rem; letter-spacing: 2px; margin-bottom: 32px; }
+    #app { width: 100%; max-width: 760px; padding: 18px; }
+    h1 { text-align: center; color: #00ffcc; letter-spacing: 4px; margin: 10px 0 4px; }
+    .subtitle { text-align: center; color: #777; letter-spacing: 2px; margin-bottom: 24px; font-size: .8rem; }
 
     .screen { display: none; }
     .screen.active { display: block; }
 
     .card {
-      background: #12121a; border: 1px solid #333; border-radius: 8px;
-      padding: 24px; margin-bottom: 16px; transition: border-color 0.3s, box-shadow 0.3s;
+      background: #12121a;
+      border: 1px solid #2f2f3d;
+      border-radius: 10px;
+      padding: 18px;
+      margin-bottom: 14px;
     }
-    .card.mod-inverted { border-color: #ff9900; box-shadow: 0 0 18px rgba(255,153,0,.2); }
-    .card.mod-bomb     { border-color: #ff3333; box-shadow: 0 0 22px rgba(255,50,50,.28); }
-    .card.mod-double   { border-color: #44aaff; box-shadow: 0 0 18px rgba(68,170,255,.2); }
-    .card h2 { color: #00ffcc; margin-bottom: 16px; font-size: 1rem; letter-spacing: 2px; }
+    .card h2 { color: #00ffcc; font-size: 1rem; letter-spacing: 2px; margin-bottom: 12px; }
 
-    input, select {
-      width: 100%; background: #1a1a24; border: 1px solid #444; color: #e0e0e0;
-      padding: 10px 14px; border-radius: 4px; font-family: inherit; font-size: 1rem; margin-bottom: 12px;
+    input, select, button {
+      width: 100%;
+      font: inherit;
+      border-radius: 6px;
+      border: 1px solid #444;
+      background: #1a1a24;
+      color: #e0e0e0;
+      padding: 11px 14px;
+      margin-bottom: 10px;
+      outline: none;
     }
-    input:focus, select:focus { outline: none; border-color: #00ffcc; }
+    input:focus, select:focus { border-color: #00ffcc; }
+    button { cursor: pointer; font-weight: bold; letter-spacing: 1px; }
+    button:hover { opacity: .9; }
 
-    button {
-      width: 100%; padding: 12px; border: none; border-radius: 4px;
-      font-family: inherit; font-size: 1rem; font-weight: bold; cursor: pointer;
-      letter-spacing: 1px; transition: opacity 0.15s; margin-bottom: 8px;
-    }
-    button:hover    { opacity: 0.85; }
-    button:disabled { opacity: 0.4; cursor: not-allowed; }
-    .btn-primary    { background: #00ffcc; color: #0a0a0f; }
-    .btn-secondary  { background: #2a2a3a; color: #e0e0e0; border: 1px solid #444; }
-    .btn-go         { background: #00cc66; color: #fff; font-size: 1.4rem; padding: 22px; }
-    .btn-fake       { background: #cc0044; color: #fff; font-size: 1.4rem; padding: 22px; }
-    .btn-defuse     { background: linear-gradient(135deg,#cc6600,#ff9900); color: #fff; font-size: 1.4rem; padding: 22px; }
-    .btn-double-hit { background: linear-gradient(135deg,#0044cc,#44aaff); color: #fff; font-size: 1.4rem; padding: 22px; }
+    .btn-primary { background: #00ffcc; color: #0a0a0f; border: none; }
+    .btn-secondary { background: #2a2a3a; border: 1px solid #444; }
+    .btn-go { background: #00cc66; color: white; border: none; font-size: 1.25rem; padding: 18px; }
+    .btn-fake { background: #cc0044; color: white; border: none; font-size: 1.25rem; padding: 18px; }
+    .btn-defuse { background: linear-gradient(135deg,#cc6600,#ff9900); color: white; border: none; font-size: 1.25rem; padding: 18px; }
+    .btn-double-hit { background: linear-gradient(135deg,#0044cc,#44aaff); color: white; border: none; font-size: 1.25rem; padding: 18px; }
     .btn-impossible { background: linear-gradient(135deg,#4a0028,#1a001a); color: #ff44ff; border: 1px solid #6a006a; }
 
-    .error { color: #ff4466; font-size: 0.85rem; margin-bottom: 8px; min-height: 20px; }
-    .room-code { font-size: 2.5rem; letter-spacing: 8px; text-align: center; color: #ffcc00; margin: 12px 0; }
-    .player-list { list-style: none; }
-    .player-list li { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #222; color: #aaa; }
-    .player-list li.host { color: #00ffcc; }
-    .player-list li .score { color: #ffcc00; }
-    .player-list li .pu-badge {
-      display: inline-block; font-size: 0.65rem; padding: 1px 6px;
-      border-radius: 8px; margin-left: 6px; letter-spacing: 0.5px; vertical-align: middle;
-    }
-    .pu-shield { background: #1a2a4a; color: #66aaff; border: 1px solid #336699; }
-    .pu-double { background: #2a1a00; color: #ffcc00; border: 1px solid #886600; }
+    .error { color: #ff4466; min-height: 20px; margin-bottom: 8px; font-size: .85rem; }
+    .room-code { font-size: 2.4rem; letter-spacing: 8px; text-align: center; color: #ffcc00; margin: 8px 0 12px; }
 
-    .phase-badge {
-      display: inline-block; padding: 4px 12px; border-radius: 20px;
-      font-size: 0.75rem; letter-spacing: 2px; font-weight: bold; margin-bottom: 12px;
+    .player-list, .scoreboard { list-style: none; }
+    .player-list li, .scoreboard li {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 9px 0;
+      border-bottom: 1px solid #222;
+      color: #aaa;
+      align-items: center;
     }
-    .phase-prep    { background: #1a3a5a; color: #44aaff; }
-    .phase-signal  { background: #3a1a1a; color: #ff4444; }
+    .player-list li.host, .scoreboard li.host { color: #00ffcc; }
+    .score { color: #ffcc00; white-space: nowrap; }
+    .team { color: #44aaff; font-size: .78rem; margin-left: 8px; }
+    .hp { color: #bbb; font-size: .78rem; margin-left: 8px; }
+
+    .phase-badge, .game-diff-badge, .mode-badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: .72rem;
+      letter-spacing: 2px;
+      font-weight: bold;
+      margin-right: 8px;
+      margin-bottom: 6px;
+    }
+    .phase-prep { background: #1a3a5a; color: #44aaff; }
+    .phase-signal { background: #3a1a1a; color: #ff4444; }
     .phase-resolve { background: #1a3a1a; color: #44ff88; }
-    .phase-lobby   { background: #2a2a1a; color: #ffcc44; }
+    .phase-lobby { background: #2a2a1a; color: #ffcc44; }
 
-    .mod-banner {
-      border-radius: 6px; padding: 10px 14px; margin-bottom: 12px;
-      display: flex; align-items: center; gap: 10px; font-size: 0.85rem; font-weight: bold;
-    }
-    .mod-banner .mod-icon { font-size: 1.3rem; }
-    .mod-banner .mod-desc { font-size: 0.75rem; font-weight: normal; opacity: 0.85; }
-    .mod-banner.normal   { display: none; }
-    .mod-banner.inverted { background: #2a1a00; border: 1px solid #ff9900; color: #ff9900; }
-    .mod-banner.bomb     { background: #2a0000; border: 1px solid #ff4444; color: #ff4444; }
-    .mod-banner.double   { background: #001a2a; border: 1px solid #44aaff; color: #44aaff; }
-
-    .powerup-card {
-      border-radius: 8px; padding: 14px 16px; margin-bottom: 12px;
-      background: #1a1600; border: 1px solid #886600;
-      display: flex; align-items: center; gap: 14px;
-      animation: powerup-pulse 1.2s infinite;
-    }
-    .powerup-card.claimed { animation: none; border-color: #444; background: #141414; }
-    .powerup-card.claimed .pu-icon { opacity: 0.4; }
-    .pu-icon { font-size: 2rem; flex-shrink: 0; }
-    .pu-info { flex: 1; }
-    .pu-name  { font-weight: bold; font-size: 0.9rem; letter-spacing: 2px; color: #ffdd44; }
-    .pu-desc  { font-size: 0.75rem; color: #aa9900; margin-top: 3px; }
-    .pu-claimed-by { font-size: 0.72rem; color: #666; margin-top: 4px; }
-    .btn-claim {
-      background: linear-gradient(135deg,#886600,#ffcc00); color: #0a0a0f;
-      padding: 10px 18px; width: auto; font-size: 0.85rem; margin-bottom: 0; flex-shrink: 0;
-      animation: powerup-pop 0.8s infinite;
-    }
-
-    .held-powerup-strip {
-      display: none; border-radius: 6px; padding: 8px 12px; margin-bottom: 10px;
-      background: #1a1200; border: 1px solid #664400;
-      font-size: 0.8rem; color: #ffcc44; letter-spacing: 1px;
-    }
-    .held-powerup-strip.visible { display: flex; align-items: center; gap: 10px; }
-
-    .reveal-flash {
-      display: none; text-align: center; font-size: 0.85rem; font-weight: bold;
-      letter-spacing: 2px; padding: 8px; border-radius: 6px; margin-bottom: 8px;
-    }
-    .reveal-flash.show-go   { display: block; background: #0a2a14; color: #00ff88; border: 1px solid #00ff88; }
-    .reveal-flash.show-fake { display: block; background: #2a0010; color: #ff3355; border: 1px solid #ff3355; }
-
-    .clue-legend {
-      background: #0f0f18; border: 1px solid #2a2a3a;
-      border-radius: 6px; padding: 10px 14px; margin-bottom: 10px;
-      font-size: 0.72rem; color: #666; letter-spacing: 0.5px; line-height: 1.7;
-    }
-    .clue-legend .cl-row { display: flex; gap: 16px; flex-wrap: wrap; }
-    .clue-legend .cl-group { flex: 1; min-width: 120px; }
-    .clue-legend .cl-title { color: #444; letter-spacing: 2px; font-size: 0.65rem; margin-bottom: 4px; }
-    .clue-legend .go-clue   { color: #00ff88; }
-    .clue-legend .fake-clue { color: #ff3355; }
-
-    .real-signal-hint { display: none; text-align: center; font-size: 0.78rem; color: #888; margin-top:-4px; margin-bottom: 8px; }
-    .real-signal-hint.visible { display: block; }
-    .rsh-val { font-weight: bold; font-size: 1rem; }
-    .rsh-go   { color: #00ff88; }
-    .rsh-fake { color: #ff3355; }
-
-    .clues { display: flex; gap: 12px; margin: 16px 0; }
-    .clue {
-      flex: 1; background: #1a1a28; border: 1px solid #333;
-      border-radius: 6px; padding: 16px; text-align: center; transition: border-color 0.3s, box-shadow 0.3s;
-    }
-    .clue-label { font-size: 0.7rem; color: #666; letter-spacing: 2px; margin-bottom: 8px; }
-    .clue-value { font-size: 1.4rem; color: #fff; font-weight: bold; }
-    .clue.warm { border-color: #664400; background: #1e1810; }
-    .clue.warm .clue-label { color: #886633; }
-    .clue.cool { border-color: #004466; background: #101820; }
-    .clue.cool .clue-label { color: #336688; }
-    .clue.bomb-clue { border-color: #ff3333; background: #1e0808; }
-
-    .lock-tile {
-      background: #1a1a28; border: 1px solid #333;
-      border-radius: 6px; padding: 12px; margin-bottom: 12px; text-align: center;
-      transition: border-color 0.3s, box-shadow 0.3s;
-    }
-    .lock-tile.lock-go   { border-color: #2a5a2a; background: #0e1a0e; }
-    .lock-tile.lock-fake { border-color: #5a2a2a; background: #1a0e0e; }
-    .lock-tile.lock-bomb { border-color: #ff3333; background: #1e0808; }
-    .lock-code { font-size: 2rem; letter-spacing: 6px; color: #ffcc00; margin: 4px 0; }
-    .lock-hint { font-size: 0.68rem; color: #555; letter-spacing: 1px; }
-
-    .timer-bar  { height: 6px; background: #222; border-radius: 3px; overflow: hidden; margin: 12px 0; }
-    .timer-fill { height: 100%; background: #00ffcc; border-radius: 3px; transition: width 0.1s linear; }
-    .timer-fill.urgent { background: #ff4444; }
-    .timer-fill.bomb   { background: #ff9900; }
-
-    .message-box { text-align: center; font-size: 1.5rem; font-weight: bold; padding: 20px; color: #fff; letter-spacing: 2px; }
-    .message-go     { color: #00ff88; }
-    .message-fake   { color: #ff3355; }
-    .message-bomb   { color: #ff9900; animation: bomb-pulse 0.4s infinite alternate; }
-    .message-double { color: #44aaff; }
-    @keyframes bomb-pulse { from { opacity:1; } to { opacity:0.5; } }
-
-    .double-counter { text-align: center; font-size: 2rem; margin-bottom: 8px; letter-spacing: 8px; }
-    .react-buttons { display: flex; gap: 12px; margin-top: 12px; }
-    .react-buttons button { flex: 1; margin-bottom: 0; }
-
-    .progress-info { display: flex; justify-content: space-between; color: #888; font-size: 0.85rem; margin-bottom: 8px; }
-    .escalation-row { display: flex; align-items: center; gap: 10px; font-size: 0.75rem; color: #666; margin-bottom: 4px; }
-    .esc-bar  { flex: 1; height: 4px; background: #222; border-radius: 2px; overflow: hidden; }
-    .esc-fill { height: 100%; background: #ff6644; border-radius: 2px; transition: width 0.4s; }
-    .game-diff-badge {
-      display: inline-block; padding: 2px 8px; border-radius: 10px;
-      font-size: 0.7rem; letter-spacing: 1px; font-weight: bold; margin-left: 8px; vertical-align: middle;
-    }
-
-    .diff-easy       { background: #1a3a1a; color: #44ff88; border: 1px solid #2a5a2a; }
-    .diff-normal     { background: #1a2a4a; color: #44aaff; border: 1px solid #2a3a6a; }
-    .diff-hard       { background: #3a1a1a; color: #ff6644; border: 1px solid #6a2a1a; }
+    .diff-easy { background: #1a3a1a; color: #44ff88; border: 1px solid #2a5a2a; }
+    .diff-normal { background: #1a2a4a; color: #44aaff; border: 1px solid #2a3a6a; }
+    .diff-hard { background: #3a1a1a; color: #ff6644; border: 1px solid #6a2a1a; }
     .diff-impossible { background: #2a0028; color: #ff44ff; border: 1px solid #6a006a; }
 
-    .log-list { margin-top: 8px; max-height: 200px; overflow-y: auto; }
-    .log-item { padding: 6px 0; border-bottom: 1px solid #1a1a24; font-size: 0.82rem; color: #888; }
+    .mode-duel { background: #27273a; color: #ddd; }
+    .mode-team { background: #0f2a38; color: #8be3ff; }
+    .mode-ffa { background: #2a2338; color: #d5b7ff; }
+
+    .progress-info { display: flex; justify-content: space-between; color: #888; font-size: .85rem; margin: 6px 0 10px; }
+    .timer-bar { height: 7px; background: #222; border-radius: 999px; overflow: hidden; margin: 12px 0; }
+    .timer-fill { height: 100%; width: 0%; background: #00ffcc; transition: width .1s linear; }
+    .timer-fill.urgent { background: #ff4444; }
+    .timer-fill.bomb { background: #ff9900; }
+
+    .mod-banner {
+      border-radius: 8px;
+      padding: 10px 14px;
+      margin-bottom: 12px;
+      display: none;
+      gap: 10px;
+      align-items: center;
+      font-size: .9rem;
+      font-weight: bold;
+    }
+    .mod-banner.show { display: flex; }
+    .mod-banner.inverted { background: #2a1a00; border: 1px solid #ff9900; color: #ff9900; }
+    .mod-banner.bomb { background: #2a0000; border: 1px solid #ff4444; color: #ff4444; }
+    .mod-banner.double { background: #001a2a; border: 1px solid #44aaff; color: #44aaff; }
+    .mod-banner.normal { background: #1a1a24; border: 1px solid #333; color: #aaa; }
+
+    .message-box { text-align: center; font-size: 1.4rem; font-weight: bold; padding: 16px; letter-spacing: 2px; }
+    .message-go { color: #00ff88; }
+    .message-fake { color: #ff3355; }
+    .message-bomb { color: #ff9900; animation: bomb-pulse .4s infinite alternate; }
+    .message-double { color: #44aaff; }
+
+    .clues { display: flex; gap: 12px; margin: 12px 0; }
+    .clue, .lock-tile, .powerup-card, .held-strip, .team-box {
+      border-radius: 8px;
+      background: #161622;
+      border: 1px solid #333;
+      padding: 14px;
+    }
+    .clue { flex: 1; text-align: center; }
+    .clue-label { font-size: .7rem; color: #666; letter-spacing: 2px; margin-bottom: 8px; }
+    .clue-value { font-size: 1.3rem; font-weight: bold; }
+    .warm { border-color: #664400; background: #1e1810; }
+    .cool { border-color: #004466; background: #101820; }
+    .bomb-clue { border-color: #ff3333; background: #1e0808; }
+
+    .lock-tile { text-align: center; margin-bottom: 12px; }
+    .lock-code { font-size: 2rem; letter-spacing: 6px; color: #ffcc00; margin: 4px 0; }
+    .lock-hint { font-size: .7rem; color: #666; letter-spacing: 1px; }
+
+    .held-strip { display: none; margin-bottom: 10px; color: #ffcc44; }
+    .held-strip.visible { display: flex; gap: 10px; align-items: center; }
+
+    .powerup-card {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 12px;
+      background: #1a1600;
+      border-color: #886600;
+      animation: powerup-pulse 1.2s infinite;
+    }
+    .powerup-card.claimed { background: #141414; border-color: #444; animation: none; }
+    .pu-icon { font-size: 2rem; flex-shrink: 0; }
+    .pu-info { flex: 1; }
+    .pu-name { font-size: .9rem; color: #ffdd44; letter-spacing: 2px; font-weight: bold; }
+    .pu-desc, .pu-claimed-by { font-size: .75rem; color: #aa9900; margin-top: 3px; }
+    .btn-claim {
+      width: auto;
+      margin-bottom: 0;
+      background: linear-gradient(135deg,#886600,#ffcc00);
+      color: #0a0a0f;
+      border: none;
+      animation: powerup-pop .8s infinite;
+    }
+
+    .team-box { margin-bottom: 12px; }
+    .team-row { display: flex; justify-content: space-between; font-size: .85rem; color: #bbb; padding: 5px 0; }
+    .bar { height: 7px; border-radius: 999px; background: #222; overflow: hidden; margin-top: 4px; }
+    .fill { height: 100%; width: 100%; background: #44aaff; }
+    .fill.b { background: #ffcc44; }
+
+    .log-list { margin-top: 8px; max-height: 220px; overflow-y: auto; }
+    .log-item { padding: 6px 0; border-bottom: 1px solid #1a1a24; font-size: .82rem; color: #888; }
     .log-item strong { color: #00ffcc; }
     .log-item.log-pu strong { color: #ffdd44; }
 
+    .htp-toggle {
+      width: 100%;
+      background: none;
+      border: 1px solid #333;
+      color: #666;
+      font: inherit;
+      letter-spacing: 2px;
+      padding: 10px;
+      border-radius: 6px;
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 0;
+      text-align: left;
+    }
+    .htp-toggle:hover { border-color: #00ffcc; color: #00ffcc; opacity: 1; }
+    .htp-body { display: none; margin-top: 12px; }
+    .htp-body.open { display: block; }
+    .htp-step { display: flex; gap: 12px; align-items: flex-start; padding: 10px 0; border-bottom: 1px solid #1a1a24; }
+    .htp-step:last-child { border-bottom: none; }
+    .htp-num {
+      min-width: 28px; height: 28px; border-radius: 999px;
+      background: #1a3a5a; color: #44aaff;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: bold; font-size: .85rem;
+    }
+    .htp-text { font-size: .84rem; color: #aaa; line-height: 1.55; }
+    .htp-text strong { color: #e0e0e0; }
+    .grid-chips { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+    .grid-chip { border-radius: 8px; padding: 10px; font-size: .78rem; line-height: 1.45; }
+    .grid-chip b { display: block; font-size: .84rem; margin-bottom: 3px; }
+
     .diff-info {
-      border-radius: 6px; padding: 12px 14px; margin-bottom: 12px;
-      font-size: 0.82rem; display: grid; grid-template-columns: 1fr 1fr; gap: 6px 16px;
+      border-radius: 6px;
+      padding: 12px 14px;
+      margin-bottom: 12px;
+      font-size: 0.82rem;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px 16px;
     }
     .diff-info .di { display: flex; justify-content: space-between; }
     .diff-info .di span:first-child { color: #888; }
@@ -226,33 +253,17 @@
     .diff-info .scale-note { grid-column: 1/-1; color: #666; font-size: 0.74rem; margin-top: 2px; }
 
     #sound-btn {
-      position: fixed; top: 14px; right: 14px; width: auto; padding: 7px 14px;
-      font-size: 0.75rem; background: #1a1a24; border: 1px solid #444; color: #888;
-      border-radius: 4px; letter-spacing: 1px; margin-bottom: 0; z-index: 100;
+      position: fixed;
+      top: 14px;
+      right: 14px;
+      width: auto;
+      z-index: 20;
+      padding: 8px 14px;
+      font-size: .75rem;
+      margin-bottom: 0;
     }
-    #sound-btn:hover { color: #00ffcc; border-color: #00ffcc; opacity: 1; }
 
-    .htp-toggle {
-      width: 100%; background: none; border: 1px solid #333; color: #666;
-      font-family: inherit; font-size: 0.82rem; letter-spacing: 2px;
-      padding: 10px; border-radius: 4px; cursor: pointer; margin-bottom: 0;
-      text-align: left; display: flex; justify-content: space-between;
-    }
-    .htp-toggle:hover { border-color: #00ffcc; color: #00ffcc; opacity: 1; }
-    .htp-body { display: none; margin-top: 12px; }
-    .htp-body.open { display: block; }
-    .htp-step { display: flex; gap: 12px; align-items: flex-start; padding: 10px 0; border-bottom: 1px solid #1a1a24; }
-    .htp-step:last-child { border-bottom: none; }
-    .htp-num {
-      min-width: 28px; height: 28px; border-radius: 50%; background: #1a3a5a; color: #44aaff;
-      display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.85rem; flex-shrink: 0;
-    }
-    .htp-text { font-size: 0.84rem; color: #aaa; line-height: 1.55; }
-    .htp-text strong { color: #e0e0e0; }
-    .grid-chips  { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 10px; }
-    .grid-chip   { border-radius: 6px; padding: 8px 10px; font-size: 0.78rem; line-height: 1.5; }
-    .grid-chip b { display: block; font-size: 0.85rem; margin-bottom: 2px; }
-
+    /* create-room popup */
     .modal-overlay {
       position: fixed;
       inset: 0;
@@ -289,19 +300,116 @@
     }
     .modal-line span:first-child { color: #888; }
     .modal-line span:last-child { color: #e0e0e0; text-align: right; }
-    .modal-actions {
-      display: flex;
-      gap: 12px;
-      margin-top: 18px;
+    .modal-actions { display: flex; gap: 12px; margin-top: 18px; }
+    .modal-actions button { margin-bottom: 0; flex: 1; }
+
+    /* react dial */
+    .react-zone { margin-top: 12px; }
+    .react-hint {
+      text-align: center;
+      color: #888;
+      margin-top: 8px;
+      font-size: 0.8rem;
+      min-height: 18px;
     }
-    .modal-actions button {
-      margin-bottom: 0;
-      flex: 1;
+    .react-dial {
+      position: relative;
+      height: 120px;
+      border-radius: 18px;
+      border: 1px solid #333;
+      background: linear-gradient(135deg, #14141d, #0d0d12);
+      overflow: hidden;
+      user-select: none;
+      touch-action: none;
+      transition: border-color .2s, box-shadow .2s, opacity .2s;
+    }
+    .react-dial.active {
+      border-color: #00ffcc;
+      box-shadow: 0 0 0 1px rgba(0,255,204,.25), 0 0 20px rgba(0,255,204,.12);
+    }
+    .react-dial.locked {
+      opacity: 0.65;
+      pointer-events: none;
+    }
+    .react-half {
+      position:absolute;
+      top:0;
+      bottom:0;
+      width:50%;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:1.5rem;
+      font-weight:bold;
+      letter-spacing: 2px;
+      text-shadow: 0 0 10px rgba(0,0,0,.3);
+    }
+    .react-left {
+      left:0;
+      color:#00ff88;
+      background: linear-gradient(90deg, rgba(0,255,136,.08), transparent);
+    }
+    .react-right {
+      right:0;
+      color:#ff3355;
+      background: linear-gradient(270deg, rgba(255,51,85,.08), transparent);
+    }
+    .react-slider {
+      position:absolute;
+      top:50%;
+      left:50%;
+      transform:translate(-50%,-50%);
+      width:72px;
+      height:72px;
+      border-radius:50%;
+      background: radial-gradient(circle at 30% 30%, #ffffff, #00ffcc 35%, #007766 100%);
+      box-shadow: 0 0 18px rgba(0,255,204,.35);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size: 0.7rem;
+      font-weight:bold;
+      color:#0a0a0f;
+      transition: left .05s linear, transform .08s linear, background .15s, box-shadow .15s;
+      pointer-events: none;
+    }
+    .react-slider.chosen-go {
+      background: radial-gradient(circle at 30% 30%, #ffffff, #00ff88 35%, #006644 100%);
+      box-shadow: 0 0 20px rgba(0,255,136,.4);
+    }
+    .react-slider.chosen-fake {
+      background: radial-gradient(circle at 30% 30%, #ffffff, #ff3355 35%, #661122 100%);
+      box-shadow: 0 0 20px rgba(255,51,85,.4);
+    }
+    .react-slider.chosen-bomb {
+      background: radial-gradient(circle at 30% 30%, #ffffff, #ff9900 35%, #663300 100%);
+      box-shadow: 0 0 20px rgba(255,153,0,.4);
+    }
+
+    .reveal-flash {
+      display: none;
+      text-align: center;
+      font-size: 0.85rem;
+      font-weight: bold;
+      letter-spacing: 2px;
+      padding: 8px;
+      border-radius: 6px;
+      margin-bottom: 8px;
+    }
+    .reveal-flash.show-go   { display: block; background: #0a2a14; color: #00ff88; border: 1px solid #00ff88; }
+    .reveal-flash.show-fake { display: block; background: #2a0010; color: #ff3355; border: 1px solid #ff3355; }
+
+    .double-counter {
+      text-align: center;
+      font-size: 2rem;
+      margin-bottom: 8px;
+      letter-spacing: 8px;
     }
   </style>
 </head>
 <body>
 <button id="sound-btn" onclick="toggleSound()">♪ SOUND ON</button>
+
 <div id="app">
   <h1>SIGNAL BREAK</h1>
   <p class="subtitle">CG 50</p>
@@ -442,12 +550,22 @@
         <span id="esc-pct">0%</span>
       </div>
       <div class="timer-bar"><div class="timer-fill" id="timer-fill"></div></div>
+      <div class="timer-bar"><div class="esc-fill" id="esc-fill" style="width:0%"></div></div>
 
+      <div class="reveal-flash" id="reveal-flash"></div>
       <div class="held-strip" id="held-strip"></div>
-
+      <div class="real-signal-hint" id="rsh">REAL SIGNAL: <span class="rsh-val" id="rsh-val"></span></div>
       <div class="message-box" id="game-message">Study the clues.</div>
 
       <div id="powerup-card" style="display:none"></div>
+
+      <div class="clue-legend" id="clue-legend">
+        <div class="cl-row">
+          <div class="cl-group"><div class="cl-title">COLOUR</div><span class="go-clue">WARM→GO</span> · <span class="fake-clue">COOL→FAKE</span></div>
+          <div class="cl-group"><div class="cl-title">WORD</div><span class="go-clue">ODD→GO</span> · <span class="fake-clue">EVEN→FAKE</span></div>
+          <div class="cl-group"><div class="cl-title">LOCK</div><span class="go-clue">ODD→GO</span> · <span class="fake-clue">EVEN→FAKE</span></div>
+        </div>
+      </div>
 
       <div class="clues">
         <div class="clue" id="clue-a-tile">
@@ -466,11 +584,15 @@
         <div class="lock-hint" id="lock-hint"></div>
       </div>
 
-      <div class="double-counter" id="double-counter">○ ○</div>
+      <div class="double-counter" id="double-counter" style="display:none">○ ○</div>
 
-      <div class="react-buttons" id="react-buttons" style="display:none">
-        <button class="btn-go" id="btn-left" onclick="react('go')">GO</button>
-        <button class="btn-fake" id="btn-right" onclick="react('fake')">FAKE</button>
+      <div class="react-zone" id="react-zone" style="display:none">
+        <div id="react-dial" class="react-dial">
+          <div class="react-half react-left" id="react-left">GO</div>
+          <div class="react-half react-right" id="react-right">FAKE</div>
+          <div id="react-slider" class="react-slider">HOLD</div>
+        </div>
+        <div id="react-hint" class="react-hint">Drag left for GO, right for FAKE, then release.</div>
       </div>
     </div>
 
@@ -549,6 +671,12 @@ let soundOn = true;
 let droneNodes = [];
 let pulseInterval = null;
 
+let reactLocked = false;
+let reactDialBound = false;
+let reactDragging = false;
+let reactLastX = 0;
+let currentReactMode = "normal";
+
 function addLog(title, msg, cls = "") {
   const el = document.createElement("div");
   el.className = `log-item ${cls}`;
@@ -615,11 +743,18 @@ function startDrone() {
   });
 }
 
-function stopDrone() { droneNodes.forEach(n => { try { n.stop?.(); n.disconnect?.(); } catch(e){} }); droneNodes = []; }
-function stopPulse()  { if (pulseInterval) { clearInterval(pulseInterval); pulseInterval = null; } }
+function stopDrone() {
+  droneNodes.forEach(n => { try { n.stop?.(); n.disconnect?.(); } catch(e){} });
+  droneNodes = [];
+}
+
+function stopPulse()  {
+  if (pulseInterval) { clearInterval(pulseInterval); pulseInterval = null; }
+}
 
 function setAudioPhase(phase, diff, modifier) {
-  if (!audioCtx) return; stopPulse();
+  if (!audioCtx) return;
+  stopPulse();
   if (phase === "prep") {
     const spd = modifier === "bomb" ? 500 : modifier === "doublehit" ? 400 : { easy:1300,normal:1000,hard:800,impossible:550 }[diff] ?? 1000;
     pulseInterval = setInterval(() => note(modifier === "bomb" ? 80 : 110, "sine", 0.18, 0.07), spd);
@@ -639,6 +774,7 @@ function setAudioPhase(phase, diff, modifier) {
   }
   if (phase === "resolve") { note(440,"triangle",0.3,0.1); note(550,"triangle",0.3,0.08,0.08); }
 }
+
 function playWin()     { if (!audioCtx) return; stopPulse(); [523,659,784,1047].forEach((f,i) => note(f,"triangle",0.4,0.18,i*0.12)); }
 function playLose()    { if (!audioCtx) return; stopPulse(); [392,349,294,220].forEach((f,i) => note(f,"sawtooth",0.4,0.14,i*0.14)); }
 function playMiss()    { if (!audioCtx) return; note(200,"sawtooth",0.3,0.22); note(150,"sawtooth",0.4,0.18,0.15); }
@@ -648,7 +784,7 @@ function playPowerup() { if (!audioCtx) return; note(880,"sine",0.1,0.2); note(1
 function playReact(ok) { ok ? (note(880,"sine",0.15,0.2), note(1320,"sine",0.15,0.18,0.1)) : (playMiss(), triggerShake()); }
 
 function toggleHTP() {
-  const body = document.getElementById("htp-body");
+  const body  = document.getElementById("htp-body");
   const arrow = document.getElementById("htp-arrow");
   body.classList.toggle("open");
   arrow.textContent = body.classList.contains("open") ? "▲" : "▼";
@@ -665,13 +801,13 @@ function triggerShake() {
 function updateDiffInfo() {
   const d = document.getElementById("host-difficulty").value;
   const info = DIFF[d] || DIFF.normal;
-  document.getElementById("diff-info").className    = "diff-info " + info.cls;
-  document.getElementById("di-prep").textContent    = info.prep;
-  document.getElementById("di-sig").textContent     = info.sig;
-  document.getElementById("di-obj").textContent     = info.obj;
-  document.getElementById("di-fake").textContent    = info.fake;
-  document.getElementById("di-desc").textContent    = info.desc;
-  document.getElementById("create-btn").className   = d === "impossible" ? "btn-impossible" : "btn-primary";
+  document.getElementById("diff-info").className = "diff-info " + info.cls;
+  document.getElementById("di-prep").textContent = info.prep;
+  document.getElementById("di-sig").textContent = info.sig;
+  document.getElementById("di-obj").textContent = info.obj;
+  document.getElementById("di-fake").textContent = info.fake;
+  document.getElementById("di-desc").textContent = info.desc;
+  document.getElementById("create-btn").className = d === "impossible" ? "btn-impossible" : "btn-primary";
 }
 
 function showScreen(id) {
@@ -681,18 +817,12 @@ function showScreen(id) {
 
 function openCreatePopup() {
   initAudio();
-
   const name = document.getElementById("host-name").value.trim() || "Host";
   const diff = document.getElementById("host-difficulty").value;
   const mode = document.getElementById("host-mode").value;
   const rounds = parseInt(document.getElementById("host-rounds").value, 10);
 
-  pendingCreateRoom = {
-    name,
-    mode,
-    difficulty: diff,
-    totalRounds: rounds
-  };
+  pendingCreateRoom = { name, mode, difficulty: diff, totalRounds: rounds };
 
   const modeLabel = {
     duel: "1v1 / Duel",
@@ -721,10 +851,8 @@ function closeCreatePopup() {
 
 function confirmCreateRoom() {
   if (!pendingCreateRoom) return;
-
   document.getElementById("create-error").textContent = "";
   document.getElementById("create-modal").style.display = "none";
-
   socket.emit("createRoom", pendingCreateRoom, (res) => {
     if (!res.ok) {
       document.getElementById("create-error").textContent = res.error;
@@ -733,7 +861,6 @@ function confirmCreateRoom() {
     myCode = res.code;
     showLobby(res.state);
   });
-
   pendingCreateRoom = null;
 }
 
@@ -778,10 +905,7 @@ function clueAClass(clueA) {
   return "bomb-clue";
 }
 
-function clueBSignal(word) {
-  return word && word.length % 2 === 1 ? "go" : "fake";
-}
-
+function clueBSignal(word) { return word && word.length % 2 === 1 ? "go" : "fake"; }
 function lockSignal(lock) {
   if (!lock || lock === "!!!") return "bomb";
   const n = parseInt(lock, 10);
@@ -801,7 +925,6 @@ function renderPowerupCard(state) {
   const claimedByMe = pu.claimedBy === mySocketId;
 
   container.style.display = "block";
-
   if (claimed) {
     const who = claimedByMe ? "You" : (pu.claimedByName || "Someone");
     container.innerHTML = `
@@ -839,7 +962,6 @@ function claimPowerup() {
 function renderPlayers(listId, state) {
   const el = document.getElementById(listId);
   if (!el) return;
-
   el.innerHTML = [...state.players]
     .sort((a, b) => b.score - a.score || b.hp - a.hp)
     .map((p) => {
@@ -861,51 +983,174 @@ function updateTimer(state) {
   }
   const totalMs = state.stageTotalMs || 4500;
   const mod = state.roundModifier || "normal";
-
   function tick() {
     const rem = state.stageEndsAt - Date.now();
     const pct = Math.max(0, Math.min(100, (rem / totalMs) * 100));
     fill.style.width = pct + "%";
     fill.className = "timer-fill" + (mod === "bomb" ? " bomb" : "") + (pct < 30 ? " urgent" : "");
     document.getElementById("esc-pct").textContent = Math.round(100 - pct) + "%";
+    document.getElementById("esc-fill").style.width = Math.round(100 - pct) + "%";
     if (rem <= 0) clearInterval(timerInterval);
   }
-
   tick();
   timerInterval = setInterval(tick, 100);
+}
+
+function bindReactDial() {
+  if (reactDialBound) return;
+  const dial = document.getElementById("react-dial");
+  if (!dial) return;
+
+  const slider = document.getElementById("react-slider");
+  const getClientX = (e) => e.clientX ?? e.touches?.[0]?.clientX ?? 0;
+
+  const update = (e) => {
+    if (!reactDragging || reactLocked) return;
+    const rect = dial.getBoundingClientRect();
+    const x = Math.max(0, Math.min(rect.width, getClientX(e) - rect.left));
+    reactLastX = x;
+    const pct = (x / rect.width) * 100;
+    slider.style.left = pct + "%";
+    slider.style.transform = "translate(-50%,-50%) scale(1.06)";
+    if (currentReactMode === "bomb") {
+      slider.textContent = "DEFUSE";
+      slider.classList.add("chosen-bomb");
+      slider.classList.remove("chosen-go", "chosen-fake");
+    } else {
+      slider.textContent = pct < 50 ? "GO" : "FAKE";
+      slider.classList.toggle("chosen-go", pct < 50);
+      slider.classList.toggle("chosen-fake", pct >= 50);
+      slider.classList.remove("chosen-bomb");
+    }
+  };
+
+  const start = (e) => {
+    if (reactLocked) return;
+    reactDragging = true;
+    dial.classList.add("active");
+    update(e);
+    e.preventDefault?.();
+  };
+
+  const end = () => {
+    if (!reactDragging || reactLocked) return;
+    reactDragging = false;
+    dial.classList.remove("active");
+
+    let type = "go";
+    if (currentReactMode === "bomb") {
+      type = "bomb";
+    } else {
+      const rect = dial.getBoundingClientRect();
+      const pct = rect.width ? (reactLastX / rect.width) * 100 : 50;
+      type = pct < 50 ? "go" : "fake";
+    }
+
+    lockAndSend(type);
+    if (currentReactMode !== "doublehit") {
+      reactLocked = true;
+    }
+  };
+
+  dial.addEventListener("pointerdown", start);
+  dial.addEventListener("pointermove", update);
+  window.addEventListener("pointerup", end);
+  window.addEventListener("pointercancel", end);
+  reactDialBound = true;
+}
+
+function resetReactDial() {
+  const dial = document.getElementById("react-dial");
+  const slider = document.getElementById("react-slider");
+  if (!dial || !slider) return;
+  slider.style.left = "50%";
+  slider.style.transform = "translate(-50%,-50%)";
+  slider.textContent = currentReactMode === "bomb" ? "DEFUSE" : "HOLD";
+  slider.classList.remove("chosen-go", "chosen-fake", "chosen-bomb");
+  dial.classList.remove("locked", "active");
+  reactDragging = false;
+  reactLastX = 0;
+}
+
+function lockAndSend(type) {
+  if (reactLocked && currentReactMode !== "doublehit") return;
+
+  const dial = document.getElementById("react-dial");
+  const hint = document.getElementById("react-hint");
+  const slider = document.getElementById("react-slider");
+
+  if (type === "go") slider.classList.add("chosen-go");
+  if (type === "fake") slider.classList.add("chosen-fake");
+  if (type === "bomb") slider.classList.add("chosen-bomb");
+
+  if (dial) dial.classList.add("locked");
+  if (hint) hint.textContent = "Submitting...";
+
+  socket.emit("reaction", { code: myCode, type }, (res) => {
+    if (!res) return;
+
+    if (res.partial) {
+      playPartial();
+      reactLocked = false;
+      if (dial) dial.classList.remove("locked");
+      if (hint) {
+        if (currentReactMode === "doublehit") hint.textContent = "Hit again.";
+        else hint.textContent = "Drag left for GO, right for FAKE, then release.";
+      }
+      return;
+    }
+
+    if (type === "bomb") playDefuse();
+    else {
+      if (audioCtx) playReact(res.ok !== false);
+      else if (res.ok === false) triggerShake();
+    }
+
+    if (res.ok === false && !res.shielded) triggerShake();
+
+    setTimeout(() => {
+      if (currentReactMode !== "doublehit") {
+        reactLocked = true;
+      }
+      if (dial) dial.classList.remove("locked");
+      resetReactDial();
+      if (hint) {
+        if (currentReactMode === "bomb") hint.textContent = "Release anywhere to DEFUSE.";
+        else if (currentReactMode === "doublehit") hint.textContent = "Hit again.";
+        else hint.textContent = "Drag left for GO, right for FAKE, then release.";
+      }
+    }, 220);
+  });
 }
 
 function showGame(state) {
   showScreen("screen-game");
 
-  const phaseMap = {
-    prep: ["prep", "PREP"],
-    signal: ["signal", "SIGNAL"],
-    resolve: ["resolve", "RESOLVE"],
-    starting: ["lobby", "STARTING"],
-  };
-
-  const [pCls, pLabel] = phaseMap[state.phase] || ["lobby", String(state.phase || "lobby").toUpperCase()];
+  const phaseMap = { prep:["prep","PREP"], signal:["signal","SIGNAL"], resolve:["resolve","RESOLVE"], starting:["lobby","STARTING"] };
+  const [pCls, pLabel] = phaseMap[state.phase] || ["lobby", state.phase.toUpperCase()];
   const badge = document.getElementById("game-phase-badge");
   badge.className = `phase-badge phase-${pCls}`;
   badge.textContent = pLabel;
 
-  const mode = MODE[state.mode] || MODE.duel;
-  const di = DIFF[state.difficulty] || DIFF.normal;
-  const mBadge = document.getElementById("game-mode-badge");
-  mBadge.className = `mode-badge ${mode.cls}`;
-  mBadge.textContent = mode.label;
-
+  const diff = state.difficulty || "normal";
+  const di = DIFF[diff] || DIFF.normal;
   const db = document.getElementById("game-diff-badge");
   db.className = `game-diff-badge ${di.cls}`;
   db.textContent = di.label;
 
+  const mode = MODE[state.mode] || MODE.duel;
+  const mBadge = document.getElementById("game-mode-badge");
+  mBadge.className = `mode-badge ${mode.cls}`;
+  mBadge.textContent = mode.label;
+
   const modifier = state.roundModifier || "normal";
+  currentReactMode = modifier;
+
   const mod = {
     normal: { cls: "normal", icon: "", title: "NORMAL ROUND", desc: "Read the clues." },
     inverted: { cls: "inverted", icon: "⚠", title: "INVERTED", desc: "The signal lies. Clues are still true." },
-    bomb: { cls: "bomb", icon: "💣", title: "BOMB ROUND", desc: "Press DEFUSE when the signal fires." },
-    doublehit: { cls: "doublehit", icon: "⚡", title: "DOUBLE HIT", desc: "Hit GO twice before time runs out." },
+    bomb: { cls: "bomb", icon: "💣", title: "BOMB ROUND", desc: "Release the dial to DEFUSE." },
+    doublehit: { cls: "double", icon: "⚡", title: "DOUBLE HIT", desc: "Release twice before time runs out." },
   }[modifier] || { cls: "normal", icon: "", title: "NORMAL ROUND", desc: "Read the clues." };
 
   const banner = document.getElementById("mod-banner");
@@ -942,11 +1187,16 @@ function showGame(state) {
     const rv = document.getElementById("rsh-val");
     rv.textContent = state.realSignal === "go" ? "GO — press GO" : "FAKE — press FAKE";
     rv.className   = "rsh-val " + (state.realSignal === "go" ? "rsh-go" : "rsh-fake");
-  } else { rsh.className = "real-signal-hint"; }
+  } else {
+    rsh.className = "real-signal-hint";
+  }
 
   if (state.phase !== "prep") {
     const revealFlash = document.getElementById("reveal-flash");
-    if (myRevealSignal && state.phase === "resolve") { myRevealSignal = null; revealFlash.className = "reveal-flash"; }
+    if (myRevealSignal && state.phase === "resolve") {
+      myRevealSignal = null;
+      revealFlash.className = "reveal-flash";
+    }
   }
   if (state.phase === "prep") {
     myRevealSignal = null;
@@ -954,7 +1204,8 @@ function showGame(state) {
   }
 
   const msgEl = document.getElementById("game-message");
-  msgEl.textContent = state.message || ""; msgEl.className = "message-box";
+  msgEl.textContent = state.message || "";
+  msgEl.className = "message-box";
   const msg = state.message || "";
   if (msg === "GO!" || msg === "HIT TWICE! GO GO!") msgEl.classList.add(modifier === "doublehit" ? "message-double" : "message-go");
   if (msg === "FAKE SIGNAL!") msgEl.classList.add("message-fake");
@@ -968,21 +1219,26 @@ function showGame(state) {
   const clueBVal  = document.getElementById("clue-b");
   clueBVal.textContent = state.clueB || "-";
   if (modifier === "bomb") {
-    clueBTile.className = "clue bomb-clue"; clueBVal.style.color = "#ff9900";
+    clueBTile.className = "clue bomb-clue";
+    clueBVal.style.color = "#ff9900";
   } else if (state.clueB) {
     const bSig = clueBSignal(state.clueB);
     clueBTile.className = "clue " + (bSig === "go" ? "warm" : "cool");
     clueBVal.style.color = bSig === "go" ? "#00ff88" : "#ff3355";
-  } else { clueBTile.className = "clue"; clueBVal.style.color = ""; }
+  } else {
+    clueBTile.className = "clue";
+    clueBVal.style.color = "";
+  }
 
   const lockTile = document.getElementById("lock-tile");
   const lockHint = document.getElementById("lock-hint");
   document.getElementById("lock-code").textContent = state.lock || "???";
   if (modifier === "bomb" || state.lock === "!!!") {
-    lockTile.className = "lock-tile lock-bomb"; lockHint.textContent = "";
+    lockTile.className = "lock-tile bomb-clue";
+    lockHint.textContent = "";
   } else {
     const lSig = lockSignal(state.lock);
-    lockTile.className = "lock-tile " + (lSig === "go" ? "lock-go" : "lock-fake");
+    lockTile.className = "lock-tile " + (lSig === "go" ? "warm" : "cool");
     lockHint.textContent = lSig === "go" ? "ODD → GO" : "EVEN → FAKE";
   }
 
@@ -994,50 +1250,36 @@ function showGame(state) {
   const heldStrip = document.getElementById("held-strip");
   if (myPlayer?.heldPowerup) {
     const m = PU_META[myPlayer.heldPowerup] || {};
-    heldStrip.className = "held-powerup-strip visible";
+    heldStrip.className = "held-strip visible";
     heldStrip.innerHTML = `<span style="font-size:1.2rem">${m.icon||"?"}</span><span>${m.name||myPlayer.heldPowerup} READY — auto-activates on next reaction</span>`;
-  } else { heldStrip.className = "held-powerup-strip"; }
+  } else {
+    heldStrip.className = "held-strip";
+    heldStrip.innerHTML = "";
+  }
 
-  const reactRow = document.getElementById("react-buttons");
+  const reactZone = document.getElementById("react-zone");
   const open = state.phase === "signal" && state.signalOpen;
-  reactRow.style.display = open ? "flex" : "none";
-  const btnLeft = document.getElementById("btn-left");
-  const btnRight = document.getElementById("btn-right");
-  const dblCounter = document.getElementById("double-counter");
-
+  reactZone.style.display = open ? "block" : "none";
   if (open) {
-    if (modifier === "bomb") {
-      btnLeft.className = "btn-defuse";
-      btnLeft.textContent = "💣 DEFUSE";
-      btnLeft.onclick = () => react("bomb");
-      btnRight.style.display = "none";
-      dblCounter.style.display = "none";
-    } else if (modifier === "doublehit") {
-      btnLeft.className = "btn-double-hit";
-      btnLeft.textContent = "⚡ HIT";
-      btnLeft.onclick = () => react("go");
-      btnRight.style.display = "none";
-      dblCounter.style.display = "block";
-      dblCounter.textContent = (state.doubleHit || 0) >= 1 ? "● ○" : "○ ○";
-    } else {
-      btnLeft.className = "btn-go";
-      btnLeft.textContent = "GO";
-      btnLeft.onclick = () => react("go");
-      btnRight.style.display = "";
-      btnRight.className = "btn-fake";
-      btnRight.textContent = "FAKE";
-      btnRight.onclick = () => react("fake");
-      dblCounter.style.display = "none";
+    bindReactDial();
+    reactLocked = false;
+    const dial = document.getElementById("react-dial");
+    if (dial) dial.classList.remove("locked");
+    resetReactDial();
+    const hint = document.getElementById("react-hint");
+    if (hint) {
+      if (modifier === "bomb") hint.textContent = "Release anywhere to DEFUSE.";
+      else if (modifier === "doublehit") hint.textContent = "Hit twice.";
+      else hint.textContent = "Drag left for GO, right for FAKE, then release.";
     }
   } else {
-    btnRight.style.display = "";
-    dblCounter.style.display = "none";
+    reactLocked = false;
+    resetReactDial();
   }
 
   document.getElementById("timer-fill").className = "timer-fill" + (modifier === "bomb" ? " bomb" : "");
-
   if (state.phase !== lastPhase) {
-    setAudioPhase(state.phase, state.difficulty || "normal", modifier);
+    setAudioPhase(state.phase, diff, modifier);
     lastPhase = state.phase;
   }
 
@@ -1051,38 +1293,41 @@ function showGame(state) {
 }
 
 function react(type) {
-  socket.emit("reaction", { code: myCode, type }, res => {
-    if (!res) return;
-    if (res.partial) {
-      playPartial();
-      return;
-    }
-    if (type === "bomb") playDefuse();
-    else {
-      if (audioCtx) playReact(res.ok !== false);
-      else if (res.ok === false) triggerShake();
-    }
-    if (res.ok === false && !res.shielded) triggerShake();
-  });
+  lockAndSend(type);
 }
 
 function showEnd(state) {
-  showScreen("screen-end"); clearInterval(timerInterval); stopPulse();
-  lastPhase = null; lastMessage = null; myRevealSignal = null;
-  const won = state.message === "Room escaped.";
+  showScreen("screen-end");
+  clearInterval(timerInterval);
+  stopPulse();
+  lastPhase = null;
+  lastMessage = null;
+  myRevealSignal = null;
+  reactLocked = false;
+
   const r = document.getElementById("end-result");
-  r.textContent = won ? "ESCAPED!" : "LOCKED OUT"; r.style.color = won ? "#00ffcc" : "#ff4466";
+  r.textContent = state.message || "MATCH OVER";
+  r.style.color = state.message && state.message.toLowerCase().includes("draw") ? "#ffcc44" : "#00ffcc";
   document.getElementById("end-message").textContent = state.message || "";
+
   document.getElementById("end-scoreboard").innerHTML =
-    [...state.players].sort((a,b) => b.score - a.score).map((p,i) =>
-      `<li><span>${["🥇","🥈","🥉"][i]||"#"+(i+1)} ${p.name}</span><span class="score">${p.score} pts</span></li>`
-    ).join("");
-  if (won) playWin(); else playLose();
+    [...state.players]
+      .sort((a, b) => b.score - a.score || b.hp - a.hp)
+      .map((p, i) => `<li><span>${["🥇","🥈","🥉"][i] || "#" + (i + 1)} ${p.name}</span><span class="score">${p.score} pts · HP ${p.hp}/${p.maxHp}</span></li>`)
+      .join("");
+
+  if (state.message && state.message.toLowerCase().includes("draw")) playLose();
+  else playWin();
 }
 
 function goHome() {
-  myCode = null; clearInterval(timerInterval); stopPulse();
-  lastPhase = null; lastMessage = null; myRevealSignal = null;
+  myCode = null;
+  clearInterval(timerInterval);
+  stopPulse();
+  lastPhase = null;
+  lastMessage = null;
+  myRevealSignal = null;
+  reactLocked = false;
   showScreen("screen-home");
 }
 
