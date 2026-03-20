@@ -1,341 +1,891 @@
-const express = require("express");
-const http = require("http");
-const { Server } = require("socket.io");
-
-const app = express();
-const server = http.createServer(app);
-const io = new Server(server, {
-  cors: { origin: "*" },
-});
-
-app.use(express.static("public"));
-
-const rooms = new Map();
-
-const COLORS = ["RED", "BLUE", "GREEN", "YELLOW", "PURPLE", "CYAN"];
-const SHAPES = ["▲", "●", "■", "◆", "★", "✚"];
-const WORDS = [
-  "ALPHA",
-  "ORBIT",
-  "GHOST",
-  "NEON",
-  "MIRROR",
-  "VORTEX",
-  "PULSE",
-  "STATIC",
-];
-
-function makeCode() {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let out = "";
-  for (let i = 0; i < 5; i++)
-    out += chars[Math.floor(Math.random() * chars.length)];
-  return out;
-}
-
-function rand(arr) {
-  return arr[Math.floor(Math.random() * arr.length)];
-}
-
-function makeRound() {
-  const aWord = rand(COLORS);
-  const aShape = rand(SHAPES);
-  const bWord = rand(WORDS);
-  const lock = String(Math.floor(100 + Math.random() * 900));
-
-  return {
-    clueA: `${aWord} ${aShape}`,
-    clueB: `${bWord}`,
-    lock,
-    signalType: Math.random() < 0.35 ? "fake" : "go",
-    signalOpen: false,
-    phase: "prep",
-    stageEndsAt: Date.now() + 4500,
-  };
-}
-
-function difficultyFor(room) {
-  if (room.difficulty === "easy") {
-    return {
-      prep: 6000,
-      signal: 2600,
-      objective: 4,
-      penalty: 1,
-      fakeChance: 0.22,
-    };
-  }
-  if (room.difficulty === "hard") {
-    return {
-      prep: 3200,
-      signal: 1500,
-      objective: 7,
-      penalty: 2,
-      fakeChance: 0.45,
-    };
-  }
-  return {
-    prep: 4500,
-    signal: 2100,
-    objective: 5,
-    penalty: 1,
-    fakeChance: 0.33,
-  };
-}
-
-function publicRoom(room) {
-  return {
-    code: room.code,
-    hostId: room.hostId,
-    phase: room.phase,
-    round: room.round,
-    totalRounds: room.totalRounds,
-    difficulty: room.difficulty,
-    objective: room.objective,
-    completed: room.completed,
-    message: room.message,
-    clueA: room.currentRound?.clueA ?? null,
-    clueB: room.currentRound?.clueB ?? null,
-    lock: room.currentRound?.lock ?? null,
-    signalType: room.currentRound?.signalType ?? null,
-    signalOpen: room.currentRound?.signalOpen ?? false,
-    stageEndsAt: room.currentRound?.stageEndsAt ?? null,
-    players: room.players.map((p) => ({
-      id: p.id,
-      name: p.name,
-      score: p.score,
-    })),
-  };
-}
-
-function emitRoom(room) {
-  io.to(room.code).emit("roomState", publicRoom(room));
-}
-
-function endGame(room, message) {
-  room.phase = "ended";
-  room.message = message;
-  if (room.currentRound) room.currentRound.signalOpen = false;
-  emitRoom(room);
-}
-
-function startResolveThenNext(room) {
-  room.phase = "resolve";
-  room.message = room.message || "Checking result...";
-  if (room.currentRound) room.currentRound.signalOpen = false;
-  emitRoom(room);
-
-  setTimeout(() => {
-    const fresh = rooms.get(room.code);
-    if (!fresh) return;
-
-    if (fresh.completed >= fresh.objective) {
-      endGame(fresh, "Room escaped.");
-      return;
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Signal Break</title>
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Courier New', monospace;
+      background: #0a0a0f; color: #e0e0e0;
+      min-height: 100vh; display: flex; align-items: center; justify-content: center;
     }
 
-    if (fresh.round >= fresh.totalRounds) {
-      endGame(
-        fresh,
-        fresh.completed >= Math.ceil(fresh.objective / 2)
-          ? "Room escaped."
-          : "Room locked."
-      );
-      return;
+    @keyframes shake {
+      0%,100% { transform: translateX(0) translateY(0) rotate(0); }
+      12%  { transform: translateX(-10px) translateY(3px) rotate(-1.5deg); }
+      24%  { transform: translateX(10px) translateY(-3px) rotate(1.5deg); }
+      36%  { transform: translateX(-8px) translateY(2px) rotate(-1deg); }
+      48%  { transform: translateX(8px) translateY(-2px) rotate(1deg); }
+      60%  { transform: translateX(-5px) translateY(1px); }
+      72%  { transform: translateX(5px) translateY(-1px); }
+      84%  { transform: translateX(-2px); }
+    }
+    @keyframes flash-red { 0%,100% { background:#0a0a0f; } 20% { background:#2a0008; } }
+    @keyframes powerup-pulse {
+      0%,100% { box-shadow: 0 0 12px rgba(255,220,0,.4); }
+      50%     { box-shadow: 0 0 28px rgba(255,220,0,.85), 0 0 6px rgba(255,220,0,.6) inset; }
+    }
+    @keyframes powerup-pop {
+      0%   { transform: scale(1); }
+      40%  { transform: scale(1.06); }
+      100% { transform: scale(1); }
+    }
+    .shake      { animation: shake 0.55s ease-out; }
+    .flash-miss { animation: flash-red 0.55s ease-out; }
+
+    #app { width: 100%; max-width: 520px; padding: 20px; }
+    h1   { text-align: center; font-size: 2rem; color: #00ffcc; letter-spacing: 4px; margin-bottom: 4px; }
+    .subtitle { text-align: center; color: #888; font-size: 0.8rem; letter-spacing: 2px; margin-bottom: 32px; }
+
+    .screen { display: none; }
+    .screen.active { display: block; }
+
+    .card {
+      background: #12121a; border: 1px solid #333; border-radius: 8px;
+      padding: 24px; margin-bottom: 16px; transition: border-color 0.3s, box-shadow 0.3s;
+    }
+    .card.mod-inverted { border-color: #ff9900; box-shadow: 0 0 18px rgba(255,153,0,.2); }
+    .card.mod-bomb     { border-color: #ff3333; box-shadow: 0 0 22px rgba(255,50,50,.28); }
+    .card.mod-double   { border-color: #44aaff; box-shadow: 0 0 18px rgba(68,170,255,.2); }
+    .card h2 { color: #00ffcc; margin-bottom: 16px; font-size: 1rem; letter-spacing: 2px; }
+
+    input, select {
+      width: 100%; background: #1a1a24; border: 1px solid #444; color: #e0e0e0;
+      padding: 10px 14px; border-radius: 4px; font-family: inherit; font-size: 1rem; margin-bottom: 12px;
+    }
+    input:focus, select:focus { outline: none; border-color: #00ffcc; }
+
+    button {
+      width: 100%; padding: 12px; border: none; border-radius: 4px;
+      font-family: inherit; font-size: 1rem; font-weight: bold; cursor: pointer;
+      letter-spacing: 1px; transition: opacity 0.15s; margin-bottom: 8px;
+    }
+    button:hover    { opacity: 0.85; }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-primary    { background: #00ffcc; color: #0a0a0f; }
+    .btn-secondary  { background: #2a2a3a; color: #e0e0e0; border: 1px solid #444; }
+    .btn-go         { background: #00cc66; color: #fff; font-size: 1.4rem; padding: 22px; }
+    .btn-fake       { background: #cc0044; color: #fff; font-size: 1.4rem; padding: 22px; }
+    .btn-defuse     { background: linear-gradient(135deg,#cc6600,#ff9900); color: #fff; font-size: 1.4rem; padding: 22px; }
+    .btn-double-hit { background: linear-gradient(135deg,#0044cc,#44aaff); color: #fff; font-size: 1.4rem; padding: 22px; }
+    .btn-impossible { background: linear-gradient(135deg,#4a0028,#1a001a); color: #ff44ff; border: 1px solid #6a006a; }
+
+    .error { color: #ff4466; font-size: 0.85rem; margin-bottom: 8px; min-height: 20px; }
+    .room-code { font-size: 2.5rem; letter-spacing: 8px; text-align: center; color: #ffcc00; margin: 12px 0; }
+    .player-list { list-style: none; }
+    .player-list li { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #222; color: #aaa; }
+    .player-list li.host { color: #00ffcc; }
+    .player-list li .score { color: #ffcc00; }
+    .player-list li .pu-badge {
+      display: inline-block; font-size: 0.65rem; padding: 1px 6px;
+      border-radius: 8px; margin-left: 6px; letter-spacing: 0.5px; vertical-align: middle;
+    }
+    .pu-shield { background: #1a2a4a; color: #66aaff; border: 1px solid #336699; }
+    .pu-double { background: #2a1a00; color: #ffcc00; border: 1px solid #886600; }
+
+    .phase-badge {
+      display: inline-block; padding: 4px 12px; border-radius: 20px;
+      font-size: 0.75rem; letter-spacing: 2px; font-weight: bold; margin-bottom: 12px;
+    }
+    .phase-prep    { background: #1a3a5a; color: #44aaff; }
+    .phase-signal  { background: #3a1a1a; color: #ff4444; }
+    .phase-resolve { background: #1a3a1a; color: #44ff88; }
+    .phase-lobby   { background: #2a2a1a; color: #ffcc44; }
+
+    /* ── Modifier banner ──────────────────────────────────────────────────── */
+    .mod-banner {
+      border-radius: 6px; padding: 10px 14px; margin-bottom: 12px;
+      display: flex; align-items: center; gap: 10px; font-size: 0.85rem; font-weight: bold;
+    }
+    .mod-banner .mod-icon { font-size: 1.3rem; }
+    .mod-banner .mod-desc { font-size: 0.75rem; font-weight: normal; opacity: 0.85; }
+    .mod-banner.normal   { display: none; }
+    .mod-banner.inverted { background: #2a1a00; border: 1px solid #ff9900; color: #ff9900; }
+    .mod-banner.bomb     { background: #2a0000; border: 1px solid #ff4444; color: #ff4444; }
+    .mod-banner.double   { background: #001a2a; border: 1px solid #44aaff; color: #44aaff; }
+
+    /* ── Powerup card ─────────────────────────────────────────────────────── */
+    .powerup-card {
+      border-radius: 8px; padding: 14px 16px; margin-bottom: 12px;
+      background: #1a1600; border: 1px solid #886600;
+      display: flex; align-items: center; gap: 14px;
+      animation: powerup-pulse 1.2s infinite;
+    }
+    .powerup-card.claimed { animation: none; border-color: #444; background: #141414; }
+    .powerup-card.claimed .pu-icon { opacity: 0.4; }
+    .pu-icon { font-size: 2rem; flex-shrink: 0; }
+    .pu-info { flex: 1; }
+    .pu-name  { font-weight: bold; font-size: 0.9rem; letter-spacing: 2px; color: #ffdd44; }
+    .pu-desc  { font-size: 0.75rem; color: #aa9900; margin-top: 3px; }
+    .pu-claimed-by { font-size: 0.72rem; color: #666; margin-top: 4px; }
+    .btn-claim {
+      background: linear-gradient(135deg,#886600,#ffcc00); color: #0a0a0f;
+      padding: 10px 18px; width: auto; font-size: 0.85rem; margin-bottom: 0; flex-shrink: 0;
+      animation: powerup-pop 0.8s infinite;
     }
 
-    fresh.round += 1;
-    startPrep(fresh);
-  }, 1400);
+    /* Held powerup strip (in-game) */
+    .held-powerup-strip {
+      display: none; border-radius: 6px; padding: 8px 12px; margin-bottom: 10px;
+      background: #1a1200; border: 1px solid #664400;
+      font-size: 0.8rem; color: #ffcc44; letter-spacing: 1px;
+    }
+    .held-powerup-strip.visible { display: flex; align-items: center; gap: 10px; }
+
+    /* REVEAL flash */
+    .reveal-flash {
+      display: none; text-align: center; font-size: 0.85rem; font-weight: bold;
+      letter-spacing: 2px; padding: 8px; border-radius: 6px; margin-bottom: 8px;
+    }
+    .reveal-flash.show-go   { display: block; background: #0a2a14; color: #00ff88; border: 1px solid #00ff88; }
+    .reveal-flash.show-fake { display: block; background: #2a0010; color: #ff3355; border: 1px solid #ff3355; }
+
+    /* ── Clue tiles ───────────────────────────────────────────────────────── */
+    .clue-legend {
+      background: #0f0f18; border: 1px solid #2a2a3a;
+      border-radius: 6px; padding: 10px 14px; margin-bottom: 10px;
+      font-size: 0.72rem; color: #666; letter-spacing: 0.5px; line-height: 1.7;
+    }
+    .clue-legend .cl-row { display: flex; gap: 16px; flex-wrap: wrap; }
+    .clue-legend .cl-group { flex: 1; min-width: 120px; }
+    .clue-legend .cl-title { color: #444; letter-spacing: 2px; font-size: 0.65rem; margin-bottom: 4px; }
+    .clue-legend .go-clue   { color: #00ff88; }
+    .clue-legend .fake-clue { color: #ff3355; }
+
+    .real-signal-hint { display: none; text-align: center; font-size: 0.78rem; color: #888; margin-top:-4px; margin-bottom: 8px; }
+    .real-signal-hint.visible { display: block; }
+    .rsh-val { font-weight: bold; font-size: 1rem; }
+    .rsh-go   { color: #00ff88; }
+    .rsh-fake { color: #ff3355; }
+
+    .clues { display: flex; gap: 12px; margin: 16px 0; }
+    .clue {
+      flex: 1; background: #1a1a28; border: 1px solid #333;
+      border-radius: 6px; padding: 16px; text-align: center; transition: border-color 0.3s, box-shadow 0.3s;
+    }
+    .clue-label { font-size: 0.7rem; color: #666; letter-spacing: 2px; margin-bottom: 8px; }
+    .clue-value { font-size: 1.4rem; color: #fff; font-weight: bold; }
+    .clue.warm { border-color: #664400; background: #1e1810; }
+    .clue.warm .clue-label { color: #886633; }
+    .clue.cool { border-color: #004466; background: #101820; }
+    .clue.cool .clue-label { color: #336688; }
+    .clue.bomb-clue { border-color: #ff3333; background: #1e0808; }
+
+    .lock-tile {
+      background: #1a1a28; border: 1px solid #333;
+      border-radius: 6px; padding: 12px; margin-bottom: 12px; text-align: center;
+      transition: border-color 0.3s, box-shadow 0.3s;
+    }
+    .lock-tile.lock-go   { border-color: #2a5a2a; background: #0e1a0e; }
+    .lock-tile.lock-fake { border-color: #5a2a2a; background: #1a0e0e; }
+    .lock-tile.lock-bomb { border-color: #ff3333; background: #1e0808; }
+    .lock-code { font-size: 2rem; letter-spacing: 6px; color: #ffcc00; margin: 4px 0; }
+    .lock-hint { font-size: 0.68rem; color: #555; letter-spacing: 1px; }
+
+    .timer-bar  { height: 6px; background: #222; border-radius: 3px; overflow: hidden; margin: 12px 0; }
+    .timer-fill { height: 100%; background: #00ffcc; border-radius: 3px; transition: width 0.1s linear; }
+    .timer-fill.urgent { background: #ff4444; }
+    .timer-fill.bomb   { background: #ff9900; }
+
+    .message-box { text-align: center; font-size: 1.5rem; font-weight: bold; padding: 20px; color: #fff; letter-spacing: 2px; }
+    .message-go     { color: #00ff88; }
+    .message-fake   { color: #ff3355; }
+    .message-bomb   { color: #ff9900; animation: bomb-pulse 0.4s infinite alternate; }
+    .message-double { color: #44aaff; }
+    @keyframes bomb-pulse { from { opacity:1; } to { opacity:0.5; } }
+
+    .double-counter { text-align: center; font-size: 2rem; margin-bottom: 8px; letter-spacing: 8px; }
+    .react-buttons { display: flex; gap: 12px; margin-top: 12px; }
+    .react-buttons button { flex: 1; margin-bottom: 0; }
+
+    .progress-info { display: flex; justify-content: space-between; color: #888; font-size: 0.85rem; margin-bottom: 8px; }
+    .escalation-row { display: flex; align-items: center; gap: 10px; font-size: 0.75rem; color: #666; margin-bottom: 4px; }
+    .esc-bar  { flex: 1; height: 4px; background: #222; border-radius: 2px; overflow: hidden; }
+    .esc-fill { height: 100%; background: #ff6644; border-radius: 2px; transition: width 0.4s; }
+    .game-diff-badge {
+      display: inline-block; padding: 2px 8px; border-radius: 10px;
+      font-size: 0.7rem; letter-spacing: 1px; font-weight: bold; margin-left: 8px; vertical-align: middle;
+    }
+
+    .diff-easy       { background: #1a3a1a; color: #44ff88; border: 1px solid #2a5a2a; }
+    .diff-normal     { background: #1a2a4a; color: #44aaff; border: 1px solid #2a3a6a; }
+    .diff-hard       { background: #3a1a1a; color: #ff6644; border: 1px solid #6a2a1a; }
+    .diff-impossible { background: #2a0028; color: #ff44ff; border: 1px solid #6a006a; }
+
+    .log-list { margin-top: 8px; max-height: 200px; overflow-y: auto; }
+    .log-item { padding: 6px 0; border-bottom: 1px solid #1a1a24; font-size: 0.82rem; color: #888; }
+    .log-item strong { color: #00ffcc; }
+    .log-item.log-pu strong { color: #ffdd44; }
+
+    .diff-info {
+      border-radius: 6px; padding: 12px 14px; margin-bottom: 12px;
+      font-size: 0.82rem; display: grid; grid-template-columns: 1fr 1fr; gap: 6px 16px;
+    }
+    .diff-info .di { display: flex; justify-content: space-between; }
+    .diff-info .di span:first-child { color: #888; }
+    .diff-info .di span:last-child  { font-weight: bold; }
+    .diff-info .desc { grid-column: 1/-1; color: #aaa; font-size: 0.78rem; margin-top: 4px; font-style: italic; }
+    .diff-info .scale-note { grid-column: 1/-1; color: #666; font-size: 0.74rem; margin-top: 2px; }
+
+    #sound-btn {
+      position: fixed; top: 14px; right: 14px; width: auto; padding: 7px 14px;
+      font-size: 0.75rem; background: #1a1a24; border: 1px solid #444; color: #888;
+      border-radius: 4px; letter-spacing: 1px; margin-bottom: 0; z-index: 100;
+    }
+    #sound-btn:hover { color: #00ffcc; border-color: #00ffcc; opacity: 1; }
+
+    .htp-toggle {
+      width: 100%; background: none; border: 1px solid #333; color: #666;
+      font-family: inherit; font-size: 0.82rem; letter-spacing: 2px;
+      padding: 10px; border-radius: 4px; cursor: pointer; margin-bottom: 0;
+      text-align: left; display: flex; justify-content: space-between;
+    }
+    .htp-toggle:hover { border-color: #00ffcc; color: #00ffcc; opacity: 1; }
+    .htp-body { display: none; margin-top: 12px; }
+    .htp-body.open { display: block; }
+    .htp-step { display: flex; gap: 12px; align-items: flex-start; padding: 10px 0; border-bottom: 1px solid #1a1a24; }
+    .htp-step:last-child { border-bottom: none; }
+    .htp-num {
+      min-width: 28px; height: 28px; border-radius: 50%; background: #1a3a5a; color: #44aaff;
+      display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.85rem; flex-shrink: 0;
+    }
+    .htp-text { font-size: 0.84rem; color: #aaa; line-height: 1.55; }
+    .htp-text strong { color: #e0e0e0; }
+    .grid-chips  { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 10px; }
+    .grid-chip   { border-radius: 6px; padding: 8px 10px; font-size: 0.78rem; line-height: 1.5; }
+    .grid-chip b { display: block; font-size: 0.85rem; margin-bottom: 2px; }
+  </style>
+</head>
+<body>
+<button id="sound-btn" onclick="toggleSound()">♪ SOUND ON</button>
+<div id="app">
+  <h1>SIGNAL BREAK</h1>
+  <p class="subtitle">CG 50</p>
+
+  <!-- ══ HOME ══════════════════════════════════════════════════════════════ -->
+  <div id="screen-home" class="screen active">
+    <div class="card">
+      <button class="htp-toggle" onclick="toggleHTP()"><span>HOW TO PLAY</span><span id="htp-arrow">▼</span></button>
+      <div class="htp-body" id="htp-body">
+        <div class="htp-step">
+          <div class="htp-num">1</div>
+          <div class="htp-text"><strong>Host creates a room</strong> — pick difficulty and rounds, share the 5-letter code.</div>
+        </div>
+        <div class="htp-step">
+          <div class="htp-num">2</div>
+          <div class="htp-text">
+            <strong>Read the clues during PREP</strong> — every clue encodes whether the signal will be GO or FAKE:<br><br>
+            <span style="color:#00ff88">WARM colour (RED/ORANGE/YELLOW/WHITE) → GO</span><br>
+            <span style="color:#ff3355">COOL colour (BLUE/GREEN/PURPLE/CYAN) → FAKE</span><br><br>
+            <span style="color:#00ff88">ODD letter-count word (3,5,7…) → GO</span><br>
+            <span style="color:#ff3355">EVEN letter-count word (4,6,8…) → FAKE</span><br><br>
+            <span style="color:#00ff88">ODD lock number → GO</span>&nbsp;·&nbsp;<span style="color:#ff3355">EVEN lock number → FAKE</span>
+          </div>
+        </div>
+        <div class="htp-step">
+          <div class="htp-num">3</div>
+          <div class="htp-text"><strong>React when the signal fires.</strong> Wrong = penalty + screen shake.</div>
+        </div>
+        <div class="htp-step">
+          <div class="htp-num">4</div>
+          <div class="htp-text"><strong>Powerups</strong> spawn randomly each round. First to CLAIM wins it:</div>
+        </div>
+        <div class="grid-chips">
+          <div class="grid-chip" style="background:#1a1200;border:1px solid #665500;color:#ffdd44"><b>🛡 SHIELD</b>Blocks the next penalty if you mess up.</div>
+          <div class="grid-chip" style="background:#1a1200;border:1px solid #665500;color:#ffdd44"><b>✕2 DOUBLE</b>Doubles your points on next correct hit.</div>
+          <div class="grid-chip" style="background:#1a1200;border:1px solid #665500;color:#ffdd44"><b>⚡ BOOST</b>Extends the signal window +700ms for everyone.</div>
+          <div class="grid-chip" style="background:#1a1200;border:1px solid #665500;color:#ffdd44"><b>👁 REVEAL</b>Privately whispers the real signal type to you.</div>
+        </div>
+        <div class="htp-step" style="border-bottom:none;padding-bottom:0">
+          <div class="htp-num">5</div>
+          <div class="htp-text"><strong>Round modifiers</strong> — can flip the rules each round: INVERTED, BOMB, DOUBLE HIT.</div>
+        </div>
+        <div class="grid-chips">
+          <div class="grid-chip diff-easy"><b>EASY</b>4 escapes needed.</div>
+          <div class="grid-chip diff-normal"><b>NORMAL</b>5 escapes needed.</div>
+          <div class="grid-chip diff-hard"><b>HARD</b>7 escapes needed.</div>
+          <div class="grid-chip diff-impossible"><b>IMPOSSIBLE</b>10 escapes. Sub-second windows.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>CREATE ROOM</h2>
+      <input id="host-name" type="text" placeholder="Your name" maxlength="20" />
+      <select id="host-difficulty" onchange="updateDiffInfo()">
+        <option value="easy">Easy</option>
+        <option value="normal" selected>Normal</option>
+        <option value="hard">Hard</option>
+        <option value="impossible">☠ Impossible</option>
+      </select>
+      <div class="diff-info diff-normal" id="diff-info">
+        <div class="di"><span>Prep window</span><span id="di-prep">4.5s → 2.5s</span></div>
+        <div class="di"><span>Signal window</span><span id="di-sig">2.1s → 1.1s</span></div>
+        <div class="di"><span>Objective</span><span id="di-obj">5 escapes</span></div>
+        <div class="di"><span>Fake chance</span><span id="di-fake">33% → 60%</span></div>
+        <div class="desc" id="di-desc">Balanced challenge. Noticeably harder by round 8.</div>
+        <div class="scale-note">↑ Values tighten each round automatically</div>
+      </div>
+      <select id="host-rounds">
+        <option value="3">3 rounds — quick</option>
+        <option value="5" selected>5 rounds — standard</option>
+        <option value="8">8 rounds — extended</option>
+        <option value="12">12 rounds — marathon</option>
+        <option value="16">16 rounds — brutal</option>
+        <option value="20">20 rounds — endurance</option>
+        <option value="25">25 rounds — chaos</option>
+      </select>
+      <div class="error" id="create-error"></div>
+      <button class="btn-primary" id="create-btn" onclick="createRoom()">CREATE ROOM</button>
+    </div>
+
+    <div class="card">
+      <h2>JOIN ROOM</h2>
+      <input id="join-name" type="text" placeholder="Your name" maxlength="20" />
+      <input id="join-code" type="text" placeholder="Room code" maxlength="5" style="text-transform:uppercase" />
+      <div class="error" id="join-error"></div>
+      <button class="btn-secondary" onclick="joinRoom()">JOIN ROOM</button>
+    </div>
+  </div>
+
+  <!-- ══ LOBBY ══════════════════════════════════════════════════════════════ -->
+  <div id="screen-lobby" class="screen">
+    <div class="card">
+      <h2>ROOM CODE</h2>
+      <div class="room-code" id="lobby-code"></div>
+      <p style="color:#666;font-size:0.8rem;text-align:center;margin-bottom:16px">Share this code with friends</p>
+      <h2>PLAYERS</h2>
+      <ul class="player-list" id="lobby-players"></ul>
+      <div style="margin-top:16px">
+        <div class="error" id="lobby-error"></div>
+        <button class="btn-primary" id="start-btn" onclick="startGame()" style="display:none">START GAME</button>
+        <p id="waiting-msg" style="text-align:center;color:#888;font-size:0.85rem">Waiting for host to start...</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ GAME ════════════════════════════════════════════════════════════════ -->
+  <div id="screen-game" class="screen">
+    <div class="card" id="game-card">
+      <div>
+        <span class="phase-badge phase-prep" id="game-phase-badge">PREP</span>
+        <span class="game-diff-badge" id="game-diff-badge"></span>
+        <div class="progress-info" style="margin-top:6px">
+          <span id="game-round-info">Round 1 / 5</span>
+          <span id="game-score-info">0 / 5 escaped</span>
+        </div>
+      </div>
+
+      <div class="mod-banner normal" id="mod-banner">
+        <span class="mod-icon" id="mod-icon"></span>
+        <div><div id="mod-title"></div><div class="mod-desc" id="mod-desc"></div></div>
+      </div>
+
+      <div class="escalation-row">
+        <span>PRESSURE</span>
+        <div class="esc-bar"><div class="esc-fill" id="esc-fill"></div></div>
+        <span id="esc-pct" style="min-width:30px;text-align:right">0%</span>
+      </div>
+      <div class="timer-bar"><div class="timer-fill" id="timer-fill"></div></div>
+
+      <!-- REVEAL flash -->
+      <div class="reveal-flash" id="reveal-flash"></div>
+
+      <!-- Held powerup strip -->
+      <div class="held-powerup-strip" id="held-strip"></div>
+
+      <div class="real-signal-hint" id="rsh">REAL SIGNAL: <span class="rsh-val" id="rsh-val"></span></div>
+      <div class="message-box" id="game-message">Study the clues.</div>
+
+      <!-- Powerup card -->
+      <div id="powerup-card" style="display:none"></div>
+
+      <!-- Clue legend -->
+      <div class="clue-legend" id="clue-legend">
+        <div class="cl-row">
+          <div class="cl-group"><div class="cl-title">COLOUR</div><span class="go-clue">WARM→GO</span> · <span class="fake-clue">COOL→FAKE</span></div>
+          <div class="cl-group"><div class="cl-title">WORD</div><span class="go-clue">ODD→GO</span> · <span class="fake-clue">EVEN→FAKE</span></div>
+          <div class="cl-group"><div class="cl-title">LOCK</div><span class="go-clue">ODD→GO</span> · <span class="fake-clue">EVEN→FAKE</span></div>
+        </div>
+      </div>
+
+      <div class="clues">
+        <div class="clue" id="clue-a-tile"><div class="clue-label">SIGNAL A</div><div class="clue-value" id="clue-a">-</div></div>
+        <div class="clue" id="clue-b-tile"><div class="clue-label">SIGNAL B</div><div class="clue-value" id="clue-b">-</div></div>
+      </div>
+      <div class="lock-tile" id="lock-tile">
+        <div class="clue-label">LOCK CODE</div>
+        <div class="lock-code" id="lock-code">???</div>
+        <div class="lock-hint" id="lock-hint"></div>
+      </div>
+
+      <div class="double-counter" id="double-counter" style="display:none">○ ○</div>
+      <div class="react-buttons" id="react-buttons" style="display:none">
+        <button class="btn-go"   id="btn-left"  onclick="react('go')">GO</button>
+        <button class="btn-fake" id="btn-right" onclick="react('fake')">FAKE</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>PLAYERS</h2>
+      <ul class="player-list" id="scoreboard"></ul>
+      <h2 style="margin-top:16px">LIVE FEED</h2>
+      <div class="log-list" id="log-list"></div>
+    </div>
+  </div>
+
+  <!-- ══ END ════════════════════════════════════════════════════════════════ -->
+  <div id="screen-end" class="screen">
+    <div class="card" style="text-align:center">
+      <div id="end-result" style="font-size:2rem;font-weight:bold;margin-bottom:16px"></div>
+      <div id="end-message" style="color:#888;margin-bottom:24px"></div>
+      <h2 style="margin-bottom:12px">FINAL SCORES</h2>
+      <ul class="player-list" id="end-scoreboard"></ul>
+      <div style="margin-top:24px"><button class="btn-primary" onclick="goHome()">PLAY AGAIN</button></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ── Clue decoding ───────────────────────────────────────────────────────── */
+const WARM_COLORS = new Set(["RED","ORANGE","YELLOW","WHITE"]);
+const COOL_COLORS = new Set(["BLUE","GREEN","PURPLE","CYAN"]);
+
+function clueAClass(clueA) {
+  if (!clueA) return "";
+  const color = clueA.split(" ")[0];
+  if (WARM_COLORS.has(color)) return "warm";
+  if (COOL_COLORS.has(color)) return "cool";
+  return "bomb-clue";
+}
+function clueBSignal(word) { return word && word.length % 2 === 1 ? "go" : "fake"; }
+function lockSignal(lock) {
+  if (!lock || lock === "!!!") return "bomb";
+  const n = parseInt(lock, 10);
+  return isNaN(n) ? "bomb" : (n % 2 === 1 ? "go" : "fake");
 }
 
-function startSignal(room) {
-  const cfg = difficultyFor(room);
+/* ── Powerup metadata ────────────────────────────────────────────────────── */
+const PU_META = {
+  SHIELD: { icon: "🛡", name: "SHIELD",  desc: "Blocks your next penalty if you react wrong." },
+  DOUBLE: { icon: "✕2", name: "DOUBLE",  desc: "Doubles your points on next correct reaction." },
+  BOOST:  { icon: "⚡", name: "BOOST",   desc: "Adds +700ms to the signal window for everyone!" },
+  REVEAL: { icon: "👁", name: "REVEAL",  desc: "Privately tells you the real signal type." },
+};
 
-  room.phase = "signal";
-  room.currentRound.signalOpen = true;
-  room.currentRound.stageEndsAt = Date.now() + cfg.signal;
-  room.message = room.currentRound.signalType === "go" ? "GO!" : "FAKE SIGNAL!";
-  emitRoom(room);
+/* ── Difficulty data ─────────────────────────────────────────────────────── */
+const DIFF = {
+  easy:       { prep:"6.0s→3.3s", sig:"2.6s→1.4s", obj:"4 escapes",  fake:"22%→50%", cls:"diff-easy",       label:"EASY",       desc:"Generous windows." },
+  normal:     { prep:"4.5s→2.5s", sig:"2.1s→1.1s", obj:"5 escapes",  fake:"33%→60%", cls:"diff-normal",     label:"NORMAL",     desc:"Balanced. Harder by round 8." },
+  hard:       { prep:"3.2s→1.8s", sig:"1.5s→0.8s", obj:"7 escapes",  fake:"45%→70%", cls:"diff-hard",       label:"HARD",       desc:"Already tough. Relentless." },
+  impossible: { prep:"2.0s→0.6s", sig:"0.8s→0.3s", obj:"10 escapes", fake:"60%→88%", cls:"diff-impossible", label:"IMPOSSIBLE", desc:"Sub-second. Good luck." },
+};
+const MODS = {
+  normal:   { cls:"normal",   icon:"",   title:"NORMAL ROUND", desc:"Standard GO / FAKE. Read the clues." },
+  inverted: { cls:"inverted", icon:"⚠",  title:"INVERTED",      desc:"Signal LIES. Clues still tell the truth!" },
+  bomb:     { cls:"bomb",     icon:"💣", title:"BOMB ROUND",    desc:"Press DEFUSE before it explodes." },
+  double:   { cls:"double",   icon:"⚡", title:"DOUBLE HIT",    desc:"Hit GO twice fast." },
+};
 
-  setTimeout(() => {
-    const fresh = rooms.get(room.code);
-    if (!fresh || fresh.phase !== "signal" || !fresh.currentRound) return;
+function updateDiffInfo() {
+  const d = document.getElementById("host-difficulty").value;
+  const info = DIFF[d] || DIFF.normal;
+  document.getElementById("diff-info").className    = "diff-info " + info.cls;
+  document.getElementById("di-prep").textContent    = info.prep;
+  document.getElementById("di-sig").textContent     = info.sig;
+  document.getElementById("di-obj").textContent     = info.obj;
+  document.getElementById("di-fake").textContent    = info.fake;
+  document.getElementById("di-desc").textContent    = info.desc;
+  document.getElementById("create-btn").className   = d === "impossible" ? "btn-impossible" : "btn-primary";
+}
 
-    fresh.currentRound.signalOpen = false;
+function toggleHTP() {
+  const body  = document.getElementById("htp-body");
+  const arrow = document.getElementById("htp-arrow");
+  body.classList.toggle("open");
+  arrow.textContent = body.classList.contains("open") ? "▲" : "▼";
+}
 
-    if (fresh.currentRound.signalType === "go") {
-      fresh.message = "Too slow.";
+/* ── Screen shake ────────────────────────────────────────────────────────── */
+function triggerShake() {
+  const app = document.getElementById("app");
+  document.body.classList.add("flash-miss");
+  app.classList.remove("shake"); void app.offsetWidth;
+  app.classList.add("shake");
+  setTimeout(() => { app.classList.remove("shake"); document.body.classList.remove("flash-miss"); }, 600);
+}
+
+/* ── Audio ───────────────────────────────────────────────────────────────── */
+let audioCtx = null, masterGain = null, soundOn = true, droneNodes = [], pulseInterval = null;
+
+function initAudio() {
+  if (audioCtx) return;
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  masterGain = audioCtx.createGain(); masterGain.gain.value = 0.55;
+  masterGain.connect(audioCtx.destination); startDrone();
+}
+function toggleSound() {
+  soundOn = !soundOn;
+  document.getElementById("sound-btn").textContent = soundOn ? "♪ SOUND ON" : "♪ SOUND OFF";
+  if (masterGain) masterGain.gain.setTargetAtTime(soundOn ? 0.55 : 0, audioCtx.currentTime, 0.1);
+}
+function note(freq, type, dur, vol, delay = 0) {
+  if (!audioCtx) return;
+  const osc = audioCtx.createOscillator(), g = audioCtx.createGain();
+  osc.type = type; osc.frequency.value = freq;
+  g.gain.setValueAtTime(0, audioCtx.currentTime + delay);
+  g.gain.linearRampToValueAtTime(vol, audioCtx.currentTime + delay + 0.02);
+  g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + delay + dur);
+  osc.connect(g); g.connect(masterGain);
+  osc.start(audioCtx.currentTime + delay); osc.stop(audioCtx.currentTime + delay + dur + 0.05);
+}
+function startDrone() {
+  stopDrone();
+  [55,82.4,110].forEach(f => {
+    const osc = audioCtx.createOscillator(), g = audioCtx.createGain();
+    osc.type = "sine"; osc.frequency.value = f; g.gain.value = 0.04;
+    osc.connect(g); g.connect(masterGain); osc.start(); droneNodes.push(osc,g);
+  });
+}
+function stopDrone() { droneNodes.forEach(n => { try { n.stop?.(); n.disconnect?.(); } catch(e){} }); droneNodes = []; }
+function stopPulse()  { if (pulseInterval) { clearInterval(pulseInterval); pulseInterval = null; } }
+function setAudioPhase(phase, diff, modifier) {
+  if (!audioCtx) return; stopPulse();
+  if (phase === "prep") {
+    const spd = modifier === "bomb" ? 500 : modifier === "double" ? 400 : { easy:1200,normal:900,hard:700,impossible:450 }[diff] ?? 900;
+    pulseInterval = setInterval(() => note(modifier === "bomb" ? 80 : 110, "sine", 0.18, 0.07), spd);
+  }
+  if (phase === "signal") {
+    if (modifier === "bomb") {
+      note(200,"square",0.1,0.2); note(150,"square",0.1,0.18,0.08);
+      pulseInterval = setInterval(() => { note(180,"sawtooth",0.12,0.14); note(120,"sawtooth",0.1,0.1,0.06); }, 200);
+    } else if (modifier === "double") {
+      note(660,"square",0.06,0.2); note(880,"square",0.06,0.18,0.05);
+      pulseInterval = setInterval(() => { note(330,"sawtooth",0.08,0.12); note(440,"sawtooth",0.06,0.10,0.04); }, 160);
     } else {
-      fresh.message = "Fake signal expired safely.";
-      fresh.completed += 1;
+      note(880,"square",0.08,0.15); note(1100,"square",0.08,0.12,0.05);
+      const spd = { easy:350,normal:280,hard:200,impossible:120 }[diff] ?? 280;
+      pulseInterval = setInterval(() => { note(220,"sawtooth",0.1,0.1); note(330,"sawtooth",0.08,0.08,0.05); }, spd);
     }
-
-    startResolveThenNext(fresh);
-  }, cfg.signal);
+  }
+  if (phase === "resolve") { note(440,"triangle",0.3,0.1); note(550,"triangle",0.3,0.08,0.08); }
 }
+function playWin()     { if (!audioCtx) return; stopPulse(); [523,659,784,1047].forEach((f,i) => note(f,"triangle",0.4,0.18,i*0.12)); }
+function playLose()    { if (!audioCtx) return; stopPulse(); [392,349,294,220].forEach((f,i) => note(f,"sawtooth",0.4,0.14,i*0.14)); }
+function playMiss()    { if (!audioCtx) return; note(200,"sawtooth",0.3,0.22); note(150,"sawtooth",0.4,0.18,0.15); }
+function playPartial() { if (!audioCtx) return; note(660,"triangle",0.12,0.18); }
+function playDefuse()  { if (!audioCtx) return; stopPulse(); [300,500,700,1000].forEach((f,i) => note(f,"triangle",0.25,0.2,i*0.07)); }
+function playPowerup() { if (!audioCtx) return; note(880,"sine",0.1,0.2); note(1320,"sine",0.12,0.18,0.08); note(1760,"sine",0.1,0.15,0.18); }
+function playReact(ok) { ok ? (note(880,"sine",0.15,0.2), note(1320,"sine",0.15,0.18,0.1)) : (playMiss(), triggerShake()); }
 
-function startPrep(room) {
-  const cfg = difficultyFor(room);
-  room.currentRound = makeRound();
+/* ── Socket & state ──────────────────────────────────────────────────────── */
+const socket = io();
+let myCode = null, mySocketId = null, timerInterval = null, lastPhase = null, lastMessage = null;
+let myRevealSignal = null;  // set when REVEAL powerup triggers
 
-  room.currentRound.signalType = Math.random() < cfg.fakeChance ? "fake" : "go";
-  room.currentRound.signalOpen = false;
-  room.currentRound.phase = "prep";
-  room.currentRound.stageEndsAt = Date.now() + cfg.prep;
-  room.phase = "prep";
-  room.message = "Study the clues.";
-  emitRoom(room);
-
-  setTimeout(() => {
-    const fresh = rooms.get(room.code);
-    if (!fresh || fresh.phase === "ended") return;
-    startSignal(fresh);
-  }, cfg.prep);
-}
-
-io.on("connection", (socket) => {
-  socket.on("createRoom", ({ name, difficulty, totalRounds }, cb) => {
-    const code = makeCode();
-
-    const room = {
-      code,
-      hostId: socket.id,
-      phase: "lobby",
-      round: 1,
-      totalRounds: Math.max(1, Math.min(15, Number(totalRounds) || 5)),
-      difficulty: ["easy", "normal", "hard"].includes(difficulty)
-        ? difficulty
-        : "normal",
-      objective: difficultyFor({
-        difficulty: ["easy", "normal", "hard"].includes(difficulty)
-          ? difficulty
-          : "normal",
-      }).objective,
-      completed: 0,
-      players: [
-        { id: socket.id, name: String(name || "Host").slice(0, 20), score: 0 },
-      ],
-      currentRound: null,
-      message: "Room created.",
-    };
-
-    rooms.set(code, room);
-    socket.join(code);
-
-    cb?.({ ok: true, code, state: publicRoom(room) });
-    emitRoom(room);
-  });
-
-  socket.on("joinRoom", ({ code, name }, cb) => {
-    code = String(code || "")
-      .toUpperCase()
-      .trim();
-    const room = rooms.get(code);
-
-    if (!room) return cb?.({ ok: false, error: "Room not found." });
-    if (room.phase !== "lobby")
-      return cb?.({ ok: false, error: "Game already started." });
-    if (room.players.some((p) => p.id === socket.id))
-      return cb?.({ ok: true, state: publicRoom(room) });
-    if (room.players.length >= 6)
-      return cb?.({ ok: false, error: "Room is full." });
-
-    room.players.push({
-      id: socket.id,
-      name: String(name || `Player ${room.players.length + 1}`).slice(0, 20),
-      score: 0,
-    });
-
-    socket.join(code);
-    cb?.({ ok: true, state: publicRoom(room) });
-    emitRoom(room);
-  });
-
-  socket.on("startGame", ({ code }, cb) => {
-    code = String(code || "")
-      .toUpperCase()
-      .trim();
-    const room = rooms.get(code);
-
-    if (!room) return cb?.({ ok: false, error: "Room not found." });
-    if (room.hostId !== socket.id)
-      return cb?.({ ok: false, error: "Only the host can start." });
-    if (room.players.length < 2)
-      return cb?.({ ok: false, error: "Need at least 2 players." });
-
-    room.phase = "starting";
-    room.message = "Starting...";
-    emitRoom(room);
-
-    setTimeout(() => {
-      const fresh = rooms.get(code);
-      if (!fresh) return;
-      fresh.round = 1;
-      fresh.completed = 0;
-      fresh.objective = difficultyFor(fresh).objective;
-      startPrep(fresh);
-      cb?.({ ok: true });
-    }, 800);
-  });
-
-  socket.on("reaction", ({ code, type }, cb) => {
-    code = String(code || "")
-      .toUpperCase()
-      .trim();
-    const room = rooms.get(code);
-
-    if (!room || room.phase !== "signal" || !room.currentRound?.signalOpen) {
-      return cb?.({ ok: false, error: "No active signal." });
-    }
-
-    const player = room.players.find((p) => p.id === socket.id);
-    if (!player) return cb?.({ ok: false, error: "Not in room." });
-
-    const correct = room.currentRound.signalType === type;
-
-    room.currentRound.signalOpen = false;
-    room.phase = "resolve";
-
-    if (correct) {
-      const fastBonus = Math.max(
-        0,
-        Math.floor((room.currentRound.stageEndsAt - Date.now()) / 500)
-      );
-      player.score += 1 + fastBonus;
-      room.completed += 1;
-      room.message = `${player.name} was correct!`;
-      emitRoom(room);
-      return setTimeout(() => startResolveThenNext(room), 900);
-    }
-
-    player.score = Math.max(0, player.score - difficultyFor(room).penalty);
-    room.message = `${player.name} messed up.`;
-    emitRoom(room);
-    return setTimeout(() => startResolveThenNext(room), 900);
-  });
-
-  socket.on("disconnect", () => {
-    for (const [code, room] of rooms.entries()) {
-      const idx = room.players.findIndex((p) => p.id === socket.id);
-      if (idx === -1) continue;
-
-      const wasHost = room.hostId === socket.id;
-      room.players.splice(idx, 1);
-
-      if (room.players.length === 0) {
-        rooms.delete(code);
-        continue;
-      }
-
-      if (wasHost) room.hostId = room.players[0].id;
-      emitRoom(room);
-    }
-  });
+socket.on("connect", () => { mySocketId = socket.id; addLog("System","Connected.",""); });
+socket.on("roomState", state => {
+  myCode = state.code;
+  if      (state.phase === "lobby")  showLobby(state);
+  else if (state.phase === "ended")  showEnd(state);
+  else                               showGame(state);
+});
+socket.on("powerupReveal", ({ realSignal }) => {
+  myRevealSignal = realSignal;
+  const el = document.getElementById("reveal-flash");
+  if (el) {
+    el.textContent = realSignal === "go" ? "👁 REVEAL: Signal is GO — press GO!" : "👁 REVEAL: Signal is FAKE — press FAKE!";
+    el.className   = "reveal-flash " + (realSignal === "go" ? "show-go" : "show-fake");
+  }
+  addLog("REVEAL", "You were privately shown the real signal.", "log-pu");
+  playPowerup();
 });
 
-app.get("/", (_, res) => {
-  res.send("Signal Break server running.");
-});
+function addLog(title, msg, cls = "") {
+  const el = document.createElement("div");
+  el.className = `log-item ${cls}`;
+  el.innerHTML = `<strong>${title}</strong> ${msg}`;
+  const list = document.getElementById("log-list");
+  if (list) list.prepend(el);
+}
 
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Server running on ${PORT}`));
+function showScreen(id) {
+  document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+  document.getElementById(id).classList.add("active");
+}
+
+function createRoom() {
+  initAudio();
+  const name   = document.getElementById("host-name").value.trim() || "Host";
+  const diff   = document.getElementById("host-difficulty").value;
+  const rounds = parseInt(document.getElementById("host-rounds").value);
+  document.getElementById("create-error").textContent = "";
+  socket.emit("createRoom", { name, difficulty: diff, totalRounds: rounds }, res => {
+    if (!res.ok) { document.getElementById("create-error").textContent = res.error; return; }
+    myCode = res.code; showLobby(res.state);
+  });
+}
+
+function joinRoom() {
+  initAudio();
+  const name = document.getElementById("join-name").value.trim() || "Player";
+  const code = document.getElementById("join-code").value.trim().toUpperCase();
+  document.getElementById("join-error").textContent = "";
+  if (!code) { document.getElementById("join-error").textContent = "Enter a room code."; return; }
+  socket.emit("joinRoom", { code, name }, res => {
+    if (!res.ok) { document.getElementById("join-error").textContent = res.error; return; }
+    myCode = code; showLobby(res.state);
+  });
+}
+
+function showLobby(state) {
+  showScreen("screen-lobby"); stopPulse();
+  document.getElementById("lobby-code").textContent = state.code;
+  renderPlayers("lobby-players", state);
+  const isHost = state.hostId === mySocketId;
+  document.getElementById("start-btn").style.display   = isHost ? "block" : "none";
+  document.getElementById("waiting-msg").style.display = isHost ? "none"  : "block";
+}
+
+function startGame() {
+  document.getElementById("lobby-error").textContent = "";
+  socket.emit("startGame", { code: myCode }, res => {
+    if (res && !res.ok) document.getElementById("lobby-error").textContent = res.error;
+  });
+}
+
+function showGame(state) {
+  showScreen("screen-game");
+
+  const phaseMap = { prep:["prep","PREP"], signal:["signal","SIGNAL"], resolve:["resolve","RESOLVE"], starting:["lobby","STARTING"] };
+  const [pCls, pLabel] = phaseMap[state.phase] || ["lobby", state.phase.toUpperCase()];
+  const badge = document.getElementById("game-phase-badge");
+  badge.className = `phase-badge phase-${pCls}`; badge.textContent = pLabel;
+
+  const diff = state.difficulty || "normal";
+  const di   = DIFF[diff] || DIFF.normal;
+  const db   = document.getElementById("game-diff-badge");
+  db.className = `game-diff-badge ${di.cls}`; db.textContent = di.label;
+
+  const modifier = state.roundModifier || "normal";
+  const mod      = MODS[modifier] || MODS.normal;
+  const banner   = document.getElementById("mod-banner");
+  banner.className = `mod-banner ${mod.cls}`;
+  document.getElementById("mod-icon").textContent  = mod.icon;
+  document.getElementById("mod-title").textContent = mod.title;
+  document.getElementById("mod-desc").textContent  = mod.desc;
+  document.getElementById("game-card").className   = "card" + (modifier !== "normal" ? ` mod-${modifier}` : "");
+
+  const escPct = Math.round(Math.min(100, ((state.round-1) / Math.max(1,state.totalRounds-1)) * 100));
+  document.getElementById("esc-fill").style.width = escPct + "%";
+  document.getElementById("esc-pct").textContent  = escPct + "%";
+  document.getElementById("game-round-info").textContent = `Round ${state.round} / ${state.totalRounds}`;
+  document.getElementById("game-score-info").textContent = `${state.completed} / ${state.objective} escaped`;
+
+  // INVERTED real-signal hint
+  const rsh = document.getElementById("rsh");
+  if (modifier === "inverted" && state.phase === "prep" && state.realSignal) {
+    rsh.className = "real-signal-hint visible";
+    const rv = document.getElementById("rsh-val");
+    rv.textContent = state.realSignal === "go" ? "GO — press GO" : "FAKE — press FAKE";
+    rv.className   = "rsh-val " + (state.realSignal === "go" ? "rsh-go" : "rsh-fake");
+  } else { rsh.className = "real-signal-hint"; }
+
+  // Clear reveal flash when phase changes to signal (it served its purpose during prep)
+  const revealFlash = document.getElementById("reveal-flash");
+  if (state.phase !== "prep") {
+    if (myRevealSignal && state.phase === "resolve") { myRevealSignal = null; revealFlash.className = "reveal-flash"; }
+  }
+  if (state.phase === "prep") { myRevealSignal = null; revealFlash.className = "reveal-flash"; }
+
+  // Message
+  const msgEl = document.getElementById("game-message");
+  msgEl.textContent = state.message || ""; msgEl.className = "message-box";
+  const msg = state.message || "";
+  if (msg === "GO!" || msg === "HIT TWICE! GO GO!") msgEl.classList.add(modifier === "double" ? "message-double" : "message-go");
+  if (msg === "FAKE SIGNAL!") msgEl.classList.add("message-fake");
+  if (msg === "💣 DEFUSE IT!") msgEl.classList.add("message-bomb");
+
+  // Clue A
+  const clueATile = document.getElementById("clue-a-tile");
+  document.getElementById("clue-a").textContent = state.clueA || "-";
+  clueATile.className = "clue" + (modifier === "bomb" ? " bomb-clue" : (state.clueA ? " " + clueAClass(state.clueA) : ""));
+
+  // Clue B
+  const clueBTile = document.getElementById("clue-b-tile");
+  const clueBVal  = document.getElementById("clue-b");
+  clueBVal.textContent = state.clueB || "-";
+  if (modifier === "bomb") {
+    clueBTile.className = "clue bomb-clue"; clueBVal.style.color = "#ff9900";
+  } else if (state.clueB) {
+    const bSig = clueBSignal(state.clueB);
+    clueBTile.className = "clue " + (bSig === "go" ? "warm" : "cool");
+    clueBVal.style.color = bSig === "go" ? "#00ff88" : "#ff3355";
+  } else { clueBTile.className = "clue"; clueBVal.style.color = ""; }
+
+  // Lock
+  const lockTile = document.getElementById("lock-tile");
+  const lockHint = document.getElementById("lock-hint");
+  document.getElementById("lock-code").textContent = state.lock || "???";
+  if (modifier === "bomb" || state.lock === "!!!") {
+    lockTile.className = "lock-tile lock-bomb"; lockHint.textContent = "";
+  } else {
+    const lSig = lockSignal(state.lock);
+    lockTile.className = "lock-tile " + (lSig === "go" ? "lock-go" : "lock-fake");
+    lockHint.textContent = lSig === "go" ? "ODD → GO" : "EVEN → FAKE";
+  }
+
+  // Clue legend only during prep
+  document.getElementById("clue-legend").style.display = state.phase === "prep" ? "block" : "none";
+
+  // ── Powerup card ──────────────────────────────────────────────────────────
+  renderPowerupCard(state);
+
+  // ── Held powerup strip ────────────────────────────────────────────────────
+  const myPlayer = state.players.find(p => p.id === mySocketId);
+  const heldStrip = document.getElementById("held-strip");
+  if (myPlayer?.heldPowerup) {
+    const m = PU_META[myPlayer.heldPowerup] || {};
+    heldStrip.className = "held-powerup-strip visible";
+    heldStrip.innerHTML = `<span style="font-size:1.2rem">${m.icon||"?"}</span><span>${m.name||myPlayer.heldPowerup} READY — auto-activates on next reaction</span>`;
+  } else { heldStrip.className = "held-powerup-strip"; }
+
+  // ── Reaction buttons ──────────────────────────────────────────────────────
+  const reactRow = document.getElementById("react-buttons");
+  const open     = state.phase === "signal" && state.signalOpen;
+  reactRow.style.display = open ? "flex" : "none";
+  const dblCounter = document.getElementById("double-counter");
+  if (open) {
+    if (modifier === "bomb") {
+      const bl = document.getElementById("btn-left"); const br = document.getElementById("btn-right");
+      bl.className="btn-defuse"; bl.textContent="💣 DEFUSE"; bl.onclick=()=>react("bomb");
+      br.style.display="none"; dblCounter.style.display="none";
+    } else if (modifier === "double") {
+      const bl = document.getElementById("btn-left"); const br = document.getElementById("btn-right");
+      bl.className="btn-double-hit"; bl.textContent="⚡ HIT"; bl.onclick=()=>react("go");
+      br.style.display="none";
+      dblCounter.style.display="block";
+      dblCounter.textContent = (state.doubleHit||0) >= 1 ? "● ○" : "○ ○";
+    } else {
+      const bl = document.getElementById("btn-left"); const br = document.getElementById("btn-right");
+      bl.className="btn-go"; bl.textContent="GO"; bl.onclick=()=>react("go");
+      br.className="btn-fake"; br.textContent="FAKE"; br.onclick=()=>react("fake");
+      br.style.display=""; dblCounter.style.display="none";
+    }
+  } else { document.getElementById("btn-right").style.display=""; dblCounter.style.display="none"; }
+
+  document.getElementById("timer-fill").className = "timer-fill" + (modifier === "bomb" ? " bomb" : "");
+  if (state.phase !== lastPhase) { setAudioPhase(state.phase, diff, modifier); lastPhase = state.phase; }
+  updateTimer(state);
+  renderPlayers("scoreboard", state);
+
+  if (state.message && state.phase === "resolve" && state.message !== lastMessage) {
+    lastMessage = state.message;
+    addLog("Round", state.message, "");
+  }
+}
+
+function renderPowerupCard(state) {
+  const container = document.getElementById("powerup-card");
+  const pu = state.roundPowerup;
+  if (!pu || state.phase === "signal" || state.phase === "resolve") {
+    container.style.display = "none"; return;
+  }
+  const meta = PU_META[pu.type] || { icon:"?", name: pu.type, desc:"" };
+  const claimed = !!pu.claimedBy;
+  const claimedByMe = pu.claimedBy === mySocketId;
+  container.style.display = "block";
+
+  if (claimed) {
+    const who = claimedByMe ? "You" : (pu.claimedByName || "Someone");
+    container.innerHTML = `
+      <div class="powerup-card claimed">
+        <div class="pu-icon">${meta.icon}</div>
+        <div class="pu-info">
+          <div class="pu-name">${meta.name}</div>
+          <div class="pu-claimed-by">${who} claimed this powerup.</div>
+        </div>
+      </div>`;
+  } else {
+    container.innerHTML = `
+      <div class="powerup-card">
+        <div class="pu-icon">${meta.icon}</div>
+        <div class="pu-info">
+          <div class="pu-name">POWERUP: ${meta.name}</div>
+          <div class="pu-desc">${meta.desc}</div>
+        </div>
+        <button class="btn-claim" onclick="claimPowerup()">CLAIM</button>
+      </div>`;
+  }
+}
+
+function claimPowerup() {
+  socket.emit("claimPowerup", { code: myCode }, res => {
+    if (res?.ok) { playPowerup(); addLog("POWERUP", `You claimed ${res.type}!`, "log-pu"); }
+  });
+}
+
+function renderPlayers(listId, state) {
+  const el = document.getElementById(listId);
+  if (!el) return;
+  el.innerHTML = [...state.players].sort((a,b) => b.score - a.score).map(p => {
+    const pBadge = p.heldPowerup ? `<span class="pu-badge pu-${p.heldPowerup.toLowerCase()}">${PU_META[p.heldPowerup]?.icon || p.heldPowerup}</span>` : "";
+    return `<li class="${p.id === state.hostId ? "host" : ""}">
+      <span>${p.id === state.hostId ? "★ " : ""}${p.name}${pBadge}</span>
+      <span class="score">${p.score} pts</span>
+    </li>`;
+  }).join("");
+}
+
+function updateTimer(state) {
+  clearInterval(timerInterval);
+  const fill = document.getElementById("timer-fill");
+  if (!state.stageEndsAt) { fill.style.width = "0%"; return; }
+  const totalMs = state.stageTotalMs || 4500;
+  const mod     = state.roundModifier || "normal";
+  function tick() {
+    const rem = state.stageEndsAt - Date.now();
+    const pct = Math.max(0, Math.min(100, (rem / totalMs) * 100));
+    fill.style.width = pct + "%";
+    fill.className = "timer-fill" + (mod === "bomb" ? " bomb" : "") + (pct < 30 ? " urgent" : "");
+    if (rem <= 0) clearInterval(timerInterval);
+  }
+  tick(); timerInterval = setInterval(tick, 100);
+}
+
+function react(type) {
+  socket.emit("reaction", { code: myCode, type }, res => {
+    if (!res) return;
+    if (res.partial) { playPartial(); return; }
+    if (type === "bomb") playDefuse();
+    else { if (audioCtx) playReact(res.ok !== false); else if (res.ok === false) triggerShake(); }
+    document.getElementById("react-buttons").style.display = "none";
+    if (res.ok === false && !res.shielded) triggerShake();
+  });
+}
+
+function showEnd(state) {
+  showScreen("screen-end"); clearInterval(timerInterval); stopPulse();
+  lastPhase = null; lastMessage = null; myRevealSignal = null;
+  const won = state.message === "Room escaped.";
+  const r   = document.getElementById("end-result");
+  r.textContent = won ? "ESCAPED!" : "LOCKED OUT"; r.style.color = won ? "#00ffcc" : "#ff4466";
+  document.getElementById("end-message").textContent = state.message || "";
+  document.getElementById("end-scoreboard").innerHTML =
+    [...state.players].sort((a,b) => b.score - a.score).map((p,i) =>
+      `<li><span>${["🥇","🥈","🥉"][i]||"#"+(i+1)} ${p.name}</span><span class="score">${p.score} pts</span></li>`
+    ).join("");
+  if (won) playWin(); else playLose();
+}
+
+function goHome() {
+  myCode = null; clearInterval(timerInterval); stopPulse();
+  lastPhase = null; lastMessage = null; myRevealSignal = null;
+  showScreen("screen-home");
+}
+</script>
+</body>
+</html>
