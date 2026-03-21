@@ -11,7 +11,7 @@ app.use(express.static("public"));
 const rooms = new Map();
 
 const VALID_DIFFS = ["easy", "normal", "hard", "impossible"];
-const VALID_MODES = ["duel", "team", "ffa"];
+const VALID_MODES = ["duel", "team", "ffa", "escape"];
 
 const GO_COLORS = ["RED", "ORANGE", "YELLOW", "WHITE"];
 const FAKE_COLORS = ["BLUE", "GREEN", "PURPLE", "CYAN"];
@@ -22,6 +22,11 @@ const FAKE_WORDS = ["ECHO", "NEON", "FLUX", "VOID", "WIRE", "NODE", "LOCK", "NOV
 
 const POWERUP_TYPES = ["SHIELD", "DOUBLE", "BOOST", "REVEAL"];
 const POWERUP_SPAWN_CHANCE = 0.45;
+
+const ESCAPE_WORDS = [
+  "MAGNOLIA", "STARFALL", "BLACKOUT", "NIGHTFOG", "OVERRIDE",
+  "SILENTLY", "WILDFIRE", "CRYSTALS", "HORIZONS", "MOONRISE"
+];
 
 function makeCode() {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -34,16 +39,46 @@ function rand(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
+function normToken(s) {
+  return String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+function caesar(str, shift) {
+  const n = ((shift % 26) + 26) % 26;
+  return [...String(str).toUpperCase()].map(ch => {
+    const c = ch.charCodeAt(0);
+    if (c < 65 || c > 90) return ch;
+    return String.fromCharCode(65 + ((c - 65 + n) % 26));
+  }).join("");
+}
+
+function reverseStr(str) {
+  return [...String(str)].reverse().join("");
+}
+
+function atbash(str) {
+  return [...String(str).toUpperCase()].map(ch => {
+    const c = ch.charCodeAt(0);
+    if (c < 65 || c > 90) return ch;
+    return String.fromCharCode(90 - (c - 65));
+  }).join("");
+}
+
+function oddPositions(str) {
+  return [...String(str)].filter((_, i) => i % 2 === 0).join("");
+}
+
 function maxPlayersForMode(mode) {
   if (mode === "duel") return 2;
   if (mode === "team") return 4;
+  if (mode === "escape") return 10;
   return 10;
 }
 
 function minPlayersForMode(mode) {
   if (mode === "duel") return 2;
   if (mode === "team") return 4;
-  return 2;
+  return 1;
 }
 
 function baseHpForDifficulty(diff) {
@@ -123,6 +158,72 @@ function maybeSpawnPowerup() {
   return { type: rand(POWERUP_TYPES), claimedBy: null, claimedByName: null };
 }
 
+function escapeTimeMs(diff) {
+  if (diff === "easy") return 80000;
+  if (diff === "normal") return 65000;
+  if (diff === "hard") return 50000;
+  return 40000;
+}
+
+function makeEscapePuzzle(room) {
+  const baseWord = rand(ESCAPE_WORDS);
+  const shift = 3 + Math.floor(Math.random() * 7);
+  const cipher = caesar(baseWord, shift);
+  const checksum = String((shift + room.round + baseWord.length) % 10);
+
+  let answer = baseWord;
+  let pages = [];
+  let mechanicLabel = "";
+
+  if (room.difficulty === "easy") {
+    answer = baseWord;
+    pages = [
+      `PAGE 1 — WHEEL CALIBRATION\nShift every letter BACK by ${shift}.`,
+      `PAGE 2 — FINAL STEP\nSubmit the recovered word exactly as written.`,
+    ];
+    mechanicLabel = "CAESAR";
+  } else if (room.difficulty === "normal") {
+    answer = reverseStr(baseWord);
+    pages = [
+      `PAGE 1 — WHEEL CALIBRATION\nShift every letter BACK by ${shift}.`,
+      `PAGE 2 — MIRROR RULE\nAfter decoding, reverse the word.`,
+      `PAGE 3 — FINAL STEP\nThe answer is the mirrored word.`,
+    ];
+    mechanicLabel = "CAESAR + MIRROR";
+  } else if (room.difficulty === "hard") {
+    answer = oddPositions(reverseStr(baseWord));
+    pages = [
+      `PAGE 1 — WHEEL CALIBRATION\nShift every letter BACK by ${shift}.`,
+      `PAGE 2 — MIRROR RULE\nAfter decoding, reverse the word.`,
+      `PAGE 3 — FRACTURE RULE\nKeep only letters in odd positions.`,
+      `PAGE 4 — FINAL STEP\nSubmit the fractured code.`,
+    ];
+    mechanicLabel = "CAESAR + MIRROR + ODD POSITIONS";
+  } else {
+    answer = atbash(oddPositions(reverseStr(baseWord))) + checksum;
+    pages = [
+      `PAGE 1 — WHEEL CALIBRATION\nShift every letter BACK by ${shift}.`,
+      `PAGE 2 — MIRROR RULE\nAfter decoding, reverse the word.`,
+      `PAGE 3 — FRACTURE RULE\nKeep only letters in odd positions.`,
+      `PAGE 4 — BLACK GLASS RULE\nApply Atbash to the remaining letters.`,
+      `PAGE 5 — FINAL CHECKSUM\nAppend the digit ${checksum} to the end.`,
+    ];
+    mechanicLabel = "CAESAR + MIRROR + ODD POSITIONS + ATBASH + CHECKSUM";
+  }
+
+  return {
+    id: `${room.code}-${room.round}-${Date.now()}`,
+    cipher,
+    answer: normToken(answer),
+    pages,
+    mechanicLabel,
+    timeMs: escapeTimeMs(room.difficulty),
+    shift,
+    checksum,
+    baseWord,
+  };
+}
+
 function initializeStats(room) {
   const hp = baseHpForDifficulty(room.difficulty);
   if (room.mode === "team") {
@@ -177,6 +278,9 @@ function alivePlayers(room) {
 }
 
 function finalTitle(room) {
+  if (room.mode === "escape") {
+    return room.escape?.strikes >= 3 ? "Escape failed." : "Escape cleared.";
+  }
   if (room.mode === "team" && room.teams) {
     const [a, b] = [...room.teams].sort((x, y) => y.score - x.score || y.hp - x.hp);
     if (a.score === b.score && a.hp === b.hp) return "Draw.";
@@ -191,6 +295,7 @@ function finalTitle(room) {
 }
 
 function shouldEnd(room) {
+  if (room.mode === "escape") return room.escape?.strikes >= 3 || room.round > room.totalRounds;
   if (room.round > room.totalRounds) return true;
   if (room.mode === "team") return aliveTeams(room).length <= 1;
   return alivePlayers(room).length <= 1;
@@ -207,6 +312,20 @@ function publicRoom(room) {
     difficulty: room.difficulty,
     message: room.message,
     teams: room.teams,
+
+    escape: room.mode === "escape" ? {
+      strikes: room.escape?.strikes ?? 0,
+      solved: room.escape?.solved ?? 0,
+      total: room.escape?.total ?? room.totalRounds,
+      currentPuzzle: room.currentPuzzle ? {
+        cipher: room.currentPuzzle.cipher,
+        pages: room.currentPuzzle.pages,
+        mechanicLabel: room.currentPuzzle.mechanicLabel,
+        timeEndsAt: room.currentPuzzle.timeEndsAt,
+        timeMs: room.currentPuzzle.timeMs,
+      } : null,
+    } : null,
+
     clueA: room.currentRound?.clueA ?? null,
     clueB: room.currentRound?.clueB ?? null,
     lock: room.currentRound?.lock ?? null,
@@ -214,8 +333,8 @@ function publicRoom(room) {
     realSignal: room.currentRound?.realSignal ?? null,
     signalType: room.currentRound?.signalType ?? null,
     signalOpen: room.currentRound?.signalOpen ?? false,
-    stageEndsAt: room.currentRound?.stageEndsAt ?? null,
-    stageTotalMs: room.currentRound?.stageTotalMs ?? null,
+    stageEndsAt: room.mode === "escape" ? room.currentPuzzle?.timeEndsAt ?? null : room.currentRound?.stageEndsAt ?? null,
+    stageTotalMs: room.mode === "escape" ? room.currentPuzzle?.timeMs ?? null : room.currentRound?.stageTotalMs ?? null,
     doubleHit: room.currentRound?.doubleHit ?? 0,
     roundPowerup: room.currentRound?.roundPowerup ?? null,
     players: room.players.map((p) => ({
@@ -249,6 +368,14 @@ function startResolveThenNext(room) {
   setTimeout(() => {
     const fresh = rooms.get(room.code);
     if (!fresh) return;
+
+    if (fresh.mode === "escape") {
+      if (fresh.escape?.strikes >= 3) return finishGame(fresh, "Escape failed.");
+      if (fresh.round >= fresh.totalRounds) return finishGame(fresh, "Escape cleared.");
+      fresh.round += 1;
+      startEscapePuzzle(fresh);
+      return;
+    }
 
     if (shouldEnd(fresh)) {
       finishGame(fresh, finalTitle(fresh));
@@ -298,13 +425,11 @@ function startSignal(room) {
     if (!fresh || fresh.phase !== "signal" || !fresh.currentRound || !fresh.currentRound.signalOpen) return;
 
     fresh.currentRound.signalOpen = false;
-
     const mod = fresh.currentRound.roundModifier;
     const st = fresh.currentRound.signalType;
 
-    if (mod === "bomb") {
-      fresh.message = "💥 Bomb exploded.";
-    } else if (mod === "doublehit") {
+    if (mod === "bomb") fresh.message = "💥 Bomb exploded.";
+    else if (mod === "doublehit") {
       if ((fresh.currentRound.doubleHit || 0) < 2) fresh.message = "Too slow — needed two hits.";
       else fresh.message = "Chain completed.";
     } else if (st === "go") {
@@ -359,14 +484,41 @@ function startPrep(room) {
   }, cfg.prep);
 }
 
-function assignTeamForJoin(room) {
-  if (room.mode !== "team") return null;
-  const aCount = room.players.filter((p) => p.team === "A").length;
-  const bCount = room.players.filter((p) => p.team === "B").length;
-  return aCount <= bCount ? "A" : "B";
+function startEscapePuzzle(room) {
+  const puzzle = makeEscapePuzzle(room);
+  room.currentPuzzle = {
+    ...puzzle,
+    timeEndsAt: Date.now() + puzzle.timeMs,
+  };
+  room.phase = "escape";
+  room.message = `Puzzle ${room.round} / ${room.totalRounds}`;
+  emitRoom(room);
+
+  const puzzleId = puzzle.id;
+
+  setTimeout(() => {
+    const fresh = rooms.get(room.code);
+    if (!fresh || fresh.phase !== "escape" || fresh.currentPuzzle?.id !== puzzleId) return;
+
+    fresh.escape.strikes += 1;
+    fresh.message = `Time expired. Strike ${fresh.escape.strikes}/3.`;
+
+    if (fresh.escape.strikes >= 3) {
+      finishGame(fresh, "Escape failed.");
+      return;
+    }
+
+    fresh.round += 1;
+    if (fresh.round > fresh.totalRounds) {
+      finishGame(fresh, "Escape cleared.");
+      return;
+    }
+
+    startEscapePuzzle(fresh);
+  }, puzzle.timeMs);
 }
 
-io.on("connection", (socket) => {
+io.on("connection", socket => {
   socket.on("createRoom", ({ name, difficulty, totalRounds, mode }, cb) => {
     const diff = VALID_DIFFS.includes(difficulty) ? difficulty : "normal";
     const gameMode = VALID_MODES.includes(mode) ? mode : "ffa";
@@ -379,19 +531,19 @@ io.on("connection", (socket) => {
       round: 1,
       totalRounds: Math.max(1, Math.min(25, Number(totalRounds) || 8)),
       difficulty: diff,
-      players: [
-        {
-          id: socket.id,
-          name: String(name || "Host").slice(0, 20),
-          score: 0,
-          hp: baseHpForDifficulty(diff),
-          maxHp: baseHpForDifficulty(diff),
-          heldPowerup: null,
-          team: gameMode === "team" ? "A" : null,
-        },
-      ],
+      players: [{
+        id: socket.id,
+        name: String(name || "Host").slice(0, 20),
+        score: 0,
+        hp: baseHpForDifficulty(diff),
+        maxHp: baseHpForDifficulty(diff),
+        heldPowerup: null,
+        team: gameMode === "team" ? "A" : null,
+      }],
       teams: null,
       currentRound: null,
+      currentPuzzle: null,
+      escape: gameMode === "escape" ? { strikes: 0, solved: 0, total: Math.max(1, Math.min(25, Number(totalRounds) || 8)) } : null,
       message: "Room created.",
     };
 
@@ -424,7 +576,7 @@ io.on("connection", (socket) => {
       hp: baseHpForDifficulty(room.difficulty),
       maxHp: baseHpForDifficulty(room.difficulty),
       heldPowerup: null,
-      team: assignTeamForJoin(room),
+      team: room.mode === "team" ? ((room.players.filter((p) => p.team === "A").length <= room.players.filter((p) => p.team === "B").length) ? "A" : "B") : null,
     };
 
     room.players.push(player);
@@ -459,19 +611,40 @@ io.on("connection", (socket) => {
     if (!room) return cb?.({ ok: false, error: "Room not found." });
     if (room.hostId !== socket.id) return cb?.({ ok: false, error: "Only the host can start." });
     if (room.players.length < minPlayersForMode(room.mode)) {
-      return cb?.({ ok: false, error: `Need at least ${minPlayersForMode(room.mode)} players.` });
+      return cb?.({ ok: false, error: `Need at least ${minPlayersForMode(room.mode)} player(s).` });
     }
 
     room.phase = "starting";
     room.message = "Starting...";
-    initializeStats(room);
     emitRoom(room);
 
     setTimeout(() => {
       const fresh = rooms.get(code);
       if (!fresh) return;
+
       fresh.round = 1;
-      fresh.message = "Study the clues.";
+      fresh.completed = 0;
+      fresh.message = "Starting...";
+
+      fresh.players.forEach(p => {
+        p.score = 0;
+        p.heldPowerup = null;
+        if (fresh.mode === "escape") {
+          p.hp = 0;
+          p.maxHp = 0;
+          p.team = null;
+        }
+      });
+
+      if (fresh.mode === "escape") {
+        fresh.escape = { strikes: 0, solved: 0, total: fresh.totalRounds };
+        startEscapePuzzle(fresh);
+        cb?.({ ok: true });
+        return;
+      }
+
+      fresh.objective = difficultyFor({ difficulty: fresh.difficulty, round: 1 }).objective;
+      initializeStats(fresh);
       startPrep(fresh);
       cb?.({ ok: true });
     }, 700);
@@ -480,6 +653,7 @@ io.on("connection", (socket) => {
   socket.on("claimPowerup", ({ code }, cb) => {
     code = String(code || "").toUpperCase().trim();
     const room = rooms.get(code);
+    if (!room || room.mode === "escape") return cb?.({ ok: false, error: "No powerups in this mode." });
     if (!room || room.phase !== "prep" || !room.currentRound?.roundPowerup) {
       return cb?.({ ok: false, error: "No powerup available." });
     }
@@ -519,6 +693,7 @@ io.on("connection", (socket) => {
   socket.on("reaction", ({ code, type }, cb) => {
     code = String(code || "").toUpperCase().trim();
     const room = rooms.get(code);
+    if (!room || room.mode === "escape") return cb?.({ ok: false, error: "Use the escape puzzle submit box." });
     if (!room || room.phase !== "signal" || !room.currentRound?.signalOpen) {
       return cb?.({ ok: false, error: "No active signal." });
     }
@@ -593,6 +768,60 @@ io.on("connection", (socket) => {
     emitRoom(room);
     cb?.({ ok: false, shielded: shield });
     return setTimeout(() => startResolveThenNext(room), 900);
+  });
+
+  socket.on("escapeSubmit", ({ code, answer }, cb) => {
+    code = String(code || "").toUpperCase().trim();
+    const room = rooms.get(code);
+
+    if (!room || room.mode !== "escape" || room.phase !== "escape" || !room.currentPuzzle) {
+      return cb?.({ ok: false, error: "No active escape puzzle." });
+    }
+
+    const player = room.players.find((p) => p.id === socket.id);
+    if (!player) return cb?.({ ok: false, error: "Not in room." });
+
+    const submitted = normToken(answer);
+    const target = room.currentPuzzle.answer;
+
+    if (submitted !== target) {
+      room.escape.strikes += 1;
+      room.message = `${player.name} was wrong. Strike ${room.escape.strikes}/3.`;
+      emitRoom(room);
+
+      if (room.escape.strikes >= 3) {
+        finishGame(room, "Escape failed.");
+      }
+
+      cb?.({ ok: false, strikes: room.escape.strikes });
+      return;
+    }
+
+    const bonus = Math.max(1, Math.floor((room.currentPuzzle.timeEndsAt - Date.now()) / 800));
+    player.score += 2 + bonus;
+    room.escape.solved += 1;
+    room.message = `${player.name} solved puzzle ${room.round}!`;
+    emitRoom(room);
+
+    cb?.({ ok: true, bonus });
+
+    setTimeout(() => {
+      const fresh = rooms.get(code);
+      if (!fresh || fresh.mode !== "escape" || fresh.phase !== "escape") return;
+
+      if (fresh.escape.strikes >= 3) {
+        finishGame(fresh, "Escape failed.");
+        return;
+      }
+
+      if (fresh.round >= fresh.totalRounds) {
+        finishGame(fresh, "Escape cleared.");
+        return;
+      }
+
+      fresh.round += 1;
+      startEscapePuzzle(fresh);
+    }, 850);
   });
 
   socket.on("disconnect", () => {
