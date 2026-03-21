@@ -1,1312 +1,869 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Signal Break</title>
-  <script src="/socket.io/socket.io.js"></script>
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: 'Courier New', monospace;
-      background: #0a0a0f;
-      color: #e0e0e0;
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
+const express = require("express");
+const http = require("http");
+const { Server } = require("socket.io");
 
-    @keyframes shake {
-      0%,100% { transform: translateX(0) translateY(0) rotate(0); }
-      12%  { transform: translateX(-10px) translateY(3px) rotate(-1.5deg); }
-      24%  { transform: translateX(10px) translateY(-3px) rotate(1.5deg); }
-      36%  { transform: translateX(-8px) translateY(2px) rotate(-1deg); }
-      48%  { transform: translateX(8px) translateY(-2px) rotate(1deg); }
-      60%  { transform: translateX(-5px) translateY(1px); }
-      72%  { transform: translateX(5px) translateY(-1px); }
-      84%  { transform: translateX(-2px); }
-    }
-    @keyframes flash-red { 0%,100% { background:#0a0a0f; } 20% { background:#2a0008; } }
-    @keyframes powerup-pulse {
-      0%,100% { box-shadow: 0 0 12px rgba(255,220,0,.4); }
-      50%     { box-shadow: 0 0 28px rgba(255,220,0,.85), 0 0 6px rgba(255,220,0,.6) inset; }
-    }
-    @keyframes powerup-pop {
-      0%   { transform: scale(1); }
-      40%  { transform: scale(1.06); }
-      100% { transform: scale(1); }
-    }
-    @keyframes bomb-pulse { from { opacity:1; } to { opacity:0.5; } }
-    .shake      { animation: shake 0.55s ease-out; }
-    .flash-miss { animation: flash-red 0.55s ease-out; }
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server, { cors: { origin: "*" } });
 
-    #app { width: 100%; max-width: 760px; padding: 18px; }
-    h1 { text-align: center; color: #00ffcc; letter-spacing: 4px; margin: 10px 0 4px; }
-    .subtitle { text-align: center; color: #777; letter-spacing: 2px; margin-bottom: 24px; font-size: .8rem; }
+app.use(express.static("public"));
 
-    .screen { display: none; }
-    .screen.active { display: block; }
+const rooms = new Map();
 
-    .card {
-      background: #12121a;
-      border: 1px solid #2f2f3d;
-      border-radius: 10px;
-      padding: 18px;
-      margin-bottom: 14px;
-    }
-    .card h2 { color: #00ffcc; font-size: 1rem; letter-spacing: 2px; margin-bottom: 12px; }
+const VALID_DIFFS = ["easy", "normal", "hard", "impossible"];
+const VALID_MODES = ["duel", "team", "ffa", "escape"];
 
-    input, select, button {
-      width: 100%;
-      font: inherit;
-      border-radius: 6px;
-      border: 1px solid #444;
-      background: #1a1a24;
-      color: #e0e0e0;
-      padding: 11px 14px;
-      margin-bottom: 10px;
-      outline: none;
-    }
-    input:focus, select:focus { border-color: #00ffcc; }
-    button { cursor: pointer; font-weight: bold; letter-spacing: 1px; }
-    button:hover { opacity: .9; }
+const GO_COLORS = ["RED", "ORANGE", "YELLOW", "WHITE"];
+const FAKE_COLORS = ["BLUE", "GREEN", "PURPLE", "CYAN"];
+const SHAPES = ["▲", "●", "■", "◆", "★", "⬟", "⬡", "⬢"];
 
-    .btn-primary { background: #00ffcc; color: #0a0a0f; border: none; }
-    .btn-secondary { background: #2a2a3a; border: 1px solid #444; }
-    .btn-go { background: #00cc66; color: white; border: none; font-size: 1.25rem; padding: 18px; }
-    .btn-fake { background: #cc0044; color: white; border: none; font-size: 1.25rem; padding: 18px; }
-    .btn-defuse { background: linear-gradient(135deg,#cc6600,#ff9900); color: white; border: none; font-size: 1.25rem; padding: 18px; }
-    .btn-double-hit { background: linear-gradient(135deg,#0044cc,#44aaff); color: white; border: none; font-size: 1.25rem; padding: 18px; }
-    .btn-impossible { background: linear-gradient(135deg,#4a0028,#1a001a); color: #ff44ff; border: 1px solid #6a006a; }
+const GO_WORDS = ["ARC", "NEXUS", "DELTA", "SIGMA", "ALPHA", "BLAZE", "PRISM", "PULSE", "GHOST", "ORBIT", "SLASH", "SPARK", "FLINT", "CRUSH", "SWIFT"];
+const FAKE_WORDS = ["ECHO", "NEON", "FLUX", "VOID", "WIRE", "NODE", "LOCK", "NOVA", "ZERO", "VORTEX", "MIRROR", "STATIC", "VECTOR", "CIPHER", "FREEZE"];
 
-    .error { color: #ff4466; min-height: 20px; margin-bottom: 8px; font-size: .85rem; }
-    .room-code { font-size: 2.4rem; letter-spacing: 8px; text-align: center; color: #ffcc00; margin: 8px 0 12px; }
+const POWERUP_TYPES = ["SHIELD", "DOUBLE", "BOOST", "REVEAL"];
+const POWERUP_SPAWN_CHANCE = 0.45;
 
-    .player-list, .scoreboard { list-style: none; }
-    .player-list li, .scoreboard li {
-      display: flex;
-      justify-content: space-between;
-      gap: 10px;
-      padding: 9px 0;
-      border-bottom: 1px solid #222;
-      color: #aaa;
-      align-items: center;
-    }
-    .player-list li.host, .scoreboard li.host { color: #00ffcc; }
-    .score { color: #ffcc00; white-space: nowrap; }
-    .team { color: #44aaff; font-size: .78rem; margin-left: 8px; }
-    .hp { color: #bbb; font-size: .78rem; margin-left: 8px; }
+const ESCAPE_WORDS = [
+  "MAGNOLIA", "STARFALL", "BLACKOUT", "NIGHTFOG", "OVERRIDE",
+  "SILENTLY", "WILDFIRE", "CRYSTALS", "HORIZONS", "MOONRISE"
+];
 
-    .phase-badge, .game-diff-badge, .mode-badge {
-      display: inline-block;
-      padding: 4px 10px;
-      border-radius: 999px;
-      font-size: .72rem;
-      letter-spacing: 2px;
-      font-weight: bold;
-      margin-right: 8px;
-      margin-bottom: 6px;
-    }
-    .phase-prep { background: #1a3a5a; color: #44aaff; }
-    .phase-signal { background: #3a1a1a; color: #ff4444; }
-    .phase-resolve { background: #1a3a1a; color: #44ff88; }
-    .phase-lobby { background: #2a2a1a; color: #ffcc44; }
-
-    .diff-easy { background: #1a3a1a; color: #44ff88; border: 1px solid #2a5a2a; }
-    .diff-normal { background: #1a2a4a; color: #44aaff; border: 1px solid #2a3a6a; }
-    .diff-hard { background: #3a1a1a; color: #ff6644; border: 1px solid #6a2a1a; }
-    .diff-impossible { background: #2a0028; color: #ff44ff; border: 1px solid #6a006a; }
-
-    .mode-duel { background: #27273a; color: #ddd; }
-    .mode-team { background: #0f2a38; color: #8be3ff; }
-    .mode-ffa { background: #2a2338; color: #d5b7ff; }
-
-    .progress-info { display: flex; justify-content: space-between; color: #888; font-size: .85rem; margin: 6px 0 10px; }
-    .timer-bar { height: 7px; background: #222; border-radius: 999px; overflow: hidden; margin: 12px 0; }
-    .timer-fill { height: 100%; width: 0%; background: #00ffcc; transition: width .1s linear; }
-    .timer-fill.urgent { background: #ff4444; }
-    .timer-fill.bomb { background: #ff9900; }
-    .esc-fill { height: 100%; width: 0%; background: #ff6644; border-radius: 999px; transition: width .4s; }
-
-    .mod-banner {
-      border-radius: 8px;
-      padding: 10px 14px;
-      margin-bottom: 12px;
-      display: none;
-      gap: 10px;
-      align-items: center;
-      font-size: .9rem;
-      font-weight: bold;
-    }
-    .mod-banner.show { display: flex; }
-    .mod-banner.inverted { background: #2a1a00; border: 1px solid #ff9900; color: #ff9900; }
-    .mod-banner.bomb { background: #2a0000; border: 1px solid #ff4444; color: #ff4444; }
-    .mod-banner.double { background: #001a2a; border: 1px solid #44aaff; color: #44aaff; }
-    .mod-banner.normal { background: #1a1a24; border: 1px solid #333; color: #aaa; }
-
-    .message-box { text-align: center; font-size: 1.4rem; font-weight: bold; padding: 16px; letter-spacing: 2px; }
-    .message-go { color: #00ff88; }
-    .message-fake { color: #ff3355; }
-    .message-bomb { color: #ff9900; animation: bomb-pulse .4s infinite alternate; }
-    .message-double { color: #44aaff; }
-
-    .clues { display: flex; gap: 12px; margin: 12px 0; }
-    .clue, .lock-tile, .powerup-card, .held-strip, .team-box {
-      border-radius: 8px;
-      background: #161622;
-      border: 1px solid #333;
-      padding: 14px;
-    }
-    .clue { flex: 1; text-align: center; }
-    .clue-label { font-size: .7rem; color: #666; letter-spacing: 2px; margin-bottom: 8px; }
-    .clue-value { font-size: 1.3rem; font-weight: bold; }
-    .warm { border-color: #664400; background: #1e1810; }
-    .cool { border-color: #004466; background: #101820; }
-    .bomb-clue { border-color: #ff3333; background: #1e0808; }
-
-    .lock-tile { text-align: center; margin-bottom: 12px; }
-    .lock-code { font-size: 2rem; letter-spacing: 6px; color: #ffcc00; margin: 4px 0; }
-    .lock-hint { font-size: .7rem; color: #666; letter-spacing: 1px; }
-
-    .held-strip { display: none; margin-bottom: 10px; color: #ffcc44; }
-    .held-strip.visible { display: flex; gap: 10px; align-items: center; }
-
-    .powerup-card {
-      display: flex;
-      align-items: center;
-      gap: 14px;
-      margin-bottom: 12px;
-      background: #1a1600;
-      border-color: #886600;
-      animation: powerup-pulse 1.2s infinite;
-    }
-    .powerup-card.claimed { background: #141414; border-color: #444; animation: none; }
-    .pu-icon { font-size: 2rem; flex-shrink: 0; }
-    .pu-info { flex: 1; }
-    .pu-name { font-size: .9rem; color: #ffdd44; letter-spacing: 2px; font-weight: bold; }
-    .pu-desc, .pu-claimed-by { font-size: .75rem; color: #aa9900; margin-top: 3px; }
-    .btn-claim {
-      width: auto;
-      margin-bottom: 0;
-      background: linear-gradient(135deg,#886600,#ffcc00);
-      color: #0a0a0f;
-      border: none;
-      animation: powerup-pop .8s infinite;
-    }
-
-    .team-box { margin-bottom: 12px; }
-    .team-row { display: flex; justify-content: space-between; font-size: .85rem; color: #bbb; padding: 5px 0; }
-    .bar { height: 7px; border-radius: 999px; background: #222; overflow: hidden; margin-top: 4px; }
-    .fill { height: 100%; width: 100%; background: #44aaff; }
-    .fill.b { background: #ffcc44; }
-
-    .log-list { margin-top: 8px; max-height: 220px; overflow-y: auto; }
-    .log-item { padding: 6px 0; border-bottom: 1px solid #1a1a24; font-size: .82rem; color: #888; }
-    .log-item strong { color: #00ffcc; }
-    .log-item.log-pu strong { color: #ffdd44; }
-
-    .htp-toggle {
-      width: 100%;
-      background: none;
-      border: 1px solid #333;
-      color: #666;
-      font: inherit;
-      letter-spacing: 2px;
-      padding: 10px;
-      border-radius: 6px;
-      display: flex;
-      justify-content: space-between;
-      margin-bottom: 0;
-      text-align: left;
-    }
-    .htp-toggle:hover { border-color: #00ffcc; color: #00ffcc; opacity: 1; }
-    .htp-body { display: none; margin-top: 12px; }
-    .htp-body.open { display: block; }
-    .htp-step { display: flex; gap: 12px; align-items: flex-start; padding: 10px 0; border-bottom: 1px solid #1a1a24; }
-    .htp-step:last-child { border-bottom: none; }
-    .htp-num {
-      min-width: 28px; height: 28px; border-radius: 999px;
-      background: #1a3a5a; color: #44aaff;
-      display: flex; align-items: center; justify-content: center;
-      font-weight: bold; font-size: .85rem;
-    }
-    .htp-text { font-size: .84rem; color: #aaa; line-height: 1.55; }
-    .htp-text strong { color: #e0e0e0; }
-    .grid-chips { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
-    .grid-chip { border-radius: 8px; padding: 10px; font-size: .78rem; line-height: 1.45; }
-    .grid-chip b { display: block; font-size: .84rem; margin-bottom: 3px; }
-
-    .diff-info {
-      border-radius: 6px;
-      padding: 12px 14px;
-      margin-bottom: 12px;
-      font-size: 0.82rem;
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 6px 16px;
-    }
-    .diff-info .di { display: flex; justify-content: space-between; }
-    .diff-info .di span:first-child { color: #888; }
-    .diff-info .di span:last-child  { font-weight: bold; }
-    .diff-info .desc { grid-column: 1/-1; color: #aaa; font-size: 0.78rem; margin-top: 4px; font-style: italic; }
-    .diff-info .scale-note { grid-column: 1/-1; color: #666; font-size: 0.74rem; margin-top: 2px; }
-
-    #sound-btn {
-      position: fixed;
-      top: 14px;
-      right: 14px;
-      width: auto;
-      z-index: 20;
-      padding: 8px 14px;
-      font-size: .75rem;
-      margin-bottom: 0;
-    }
-
-    .modal-overlay {
-      position: fixed;
-      inset: 0;
-      background: rgba(0, 0, 0, 0.72);
-      display: none;
-      align-items: center;
-      justify-content: center;
-      z-index: 9999;
-      padding: 18px;
-      backdrop-filter: blur(6px);
-    }
-    .modal-card {
-      width: 100%;
-      max-width: 420px;
-      background: #12121a;
-      border: 1px solid #3a3a4a;
-      border-radius: 12px;
-      padding: 20px;
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-    }
-    .modal-card h2 {
-      color: #00ffcc;
-      letter-spacing: 2px;
-      font-size: 1rem;
-      margin-bottom: 14px;
-    }
-    .modal-line {
-      display: flex;
-      justify-content: space-between;
-      gap: 12px;
-      padding: 10px 0;
-      border-bottom: 1px solid #23232f;
-      font-size: 0.88rem;
-    }
-    .modal-line span:first-child { color: #888; }
-    .modal-line span:last-child { color: #e0e0e0; text-align: right; }
-    .modal-actions { display: flex; gap: 12px; margin-top: 18px; }
-    .modal-actions button { margin-bottom: 0; flex: 1; }
-
-    .react-zone { margin-top: 12px; }
-    .react-hint {
-      text-align: center;
-      color: #888;
-      margin-top: 8px;
-      font-size: 0.8rem;
-      min-height: 18px;
-    }
-    .react-dial {
-      position: relative;
-      height: 120px;
-      border-radius: 18px;
-      border: 1px solid #333;
-      background: linear-gradient(135deg, #14141d, #0d0d12);
-      overflow: hidden;
-      user-select: none;
-      touch-action: none;
-      transition: border-color .2s, box-shadow .2s, opacity .2s;
-    }
-    .react-dial.active {
-      border-color: #00ffcc;
-      box-shadow: 0 0 0 1px rgba(0,255,204,.25), 0 0 20px rgba(0,255,204,.12);
-    }
-    .react-dial.locked {
-      opacity: 0.65;
-      pointer-events: none;
-    }
-    .react-half {
-      position:absolute;
-      top:0;
-      bottom:0;
-      width:50%;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      font-size:1.5rem;
-      font-weight:bold;
-      letter-spacing: 2px;
-      text-shadow: 0 0 10px rgba(0,0,0,.3);
-    }
-    .react-left {
-      left:0;
-      color:#00ff88;
-      background: linear-gradient(90deg, rgba(0,255,136,.08), transparent);
-    }
-    .react-right {
-      right:0;
-      color:#ff3355;
-      background: linear-gradient(270deg, rgba(255,51,85,.08), transparent);
-    }
-    .react-slider {
-      position:absolute;
-      top:50%;
-      left:50%;
-      transform:translate(-50%,-50%);
-      width:72px;
-      height:72px;
-      border-radius:50%;
-      background: radial-gradient(circle at 30% 30%, #ffffff, #00ffcc 35%, #007766 100%);
-      box-shadow: 0 0 18px rgba(0,255,204,.35);
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      font-size: 0.7rem;
-      font-weight:bold;
-      color:#0a0a0f;
-      transition: left .05s linear, transform .08s linear, background .15s, box-shadow .15s;
-      pointer-events: none;
-    }
-    .react-slider.chosen-go {
-      background: radial-gradient(circle at 30% 30%, #ffffff, #00ff88 35%, #006644 100%);
-      box-shadow: 0 0 20px rgba(0,255,136,.4);
-    }
-    .react-slider.chosen-fake {
-      background: radial-gradient(circle at 30% 30%, #ffffff, #ff3355 35%, #661122 100%);
-      box-shadow: 0 0 20px rgba(255,51,85,.4);
-    }
-    .react-slider.chosen-bomb {
-      background: radial-gradient(circle at 30% 30%, #ffffff, #ff9900 35%, #663300 100%);
-      box-shadow: 0 0 20px rgba(255,153,0,.4);
-    }
-
-    .reveal-flash {
-      display: none;
-      text-align: center;
-      font-size: 0.85rem;
-      font-weight: bold;
-      letter-spacing: 2px;
-      padding: 8px;
-      border-radius: 6px;
-      margin-bottom: 8px;
-    }
-    .reveal-flash.show-go   { display: block; background: #0a2a14; color: #00ff88; border: 1px solid #00ff88; }
-    .reveal-flash.show-fake { display: block; background: #2a0010; color: #ff3355; border: 1px solid #ff3355; }
-    .double-counter { text-align: center; font-size: 2rem; margin-bottom: 8px; letter-spacing: 8px; }
-  </style>
-</head>
-<body>
-<button id="sound-btn" onclick="toggleSound()">♪ SOUND ON</button>
-
-<div id="app">
-  <h1>SIGNAL BREAK</h1>
-  <p class="subtitle">CG 50</p>
-
-  <div id="screen-home" class="screen active">
-    <div class="card">
-      <button class="htp-toggle" onclick="toggleHTP()"><span>HOW TO PLAY</span><span id="htp-arrow">▼</span></button>
-      <div class="htp-body" id="htp-body">
-        <div class="htp-step">
-          <div class="htp-num">1</div>
-          <div class="htp-text"><strong>Host creates a room</strong> — pick difficulty, mode, and rounds, share the 5-letter code.</div>
-        </div>
-        <div class="htp-step">
-          <div class="htp-num">2</div>
-          <div class="htp-text">
-            <strong>Read the clues during PREP</strong> — every clue encodes whether the signal will be GO or FAKE:<br><br>
-            <span style="color:#00ff88">WARM colour (RED/ORANGE/YELLOW/WHITE) → GO</span><br>
-            <span style="color:#ff3355">COOL colour (BLUE/GREEN/PURPLE/CYAN) → FAKE</span><br><br>
-            <span style="color:#00ff88">ODD letter-count word (3,5,7…) → GO</span><br>
-            <span style="color:#ff3355">EVEN letter-count word (4,6,8…) → FAKE</span><br><br>
-            <span style="color:#00ff88">ODD lock number → GO</span>&nbsp;·&nbsp;<span style="color:#ff3355">EVEN lock number → FAKE</span>
-          </div>
-        </div>
-        <div class="htp-step">
-          <div class="htp-num">3</div>
-          <div class="htp-text"><strong>Hold, line up your choice, then release.</strong> Wrong = penalty + screen shake.</div>
-        </div>
-        <div class="htp-step">
-          <div class="htp-num">4</div>
-          <div class="htp-text"><strong>Powerups</strong> spawn randomly each round. First to CLAIM wins it:</div>
-        </div>
-        <div class="grid-chips">
-          <div class="grid-chip" style="background:#1a1200;border:1px solid #665500;color:#ffdd44"><b>🛡 SHIELD</b>Blocks the next penalty if you mess up.</div>
-          <div class="grid-chip" style="background:#1a1200;border:1px solid #665500;color:#ffdd44"><b>✕2 DOUBLE</b>Doubles your points on next correct hit.</div>
-          <div class="grid-chip" style="background:#1a1200;border:1px solid #665500;color:#ffdd44"><b>⚡ BOOST</b>Extends the signal window +700ms for everyone.</div>
-          <div class="grid-chip" style="background:#1a1200;border:1px solid #665500;color:#ffdd44"><b>👁 REVEAL</b>Privately whispers the real signal type to you.</div>
-        </div>
-        <div class="htp-step" style="border-bottom:none;padding-bottom:0">
-          <div class="htp-num">5</div>
-          <div class="htp-text"><strong>Round modifiers</strong> — can flip the rules each round: INVERTED, BOMB, DOUBLE HIT.</div>
-        </div>
-        <div class="grid-chips">
-          <div class="grid-chip diff-easy"><b>EASY</b>4 escapes needed.</div>
-          <div class="grid-chip diff-normal"><b>NORMAL</b>5 escapes needed.</div>
-          <div class="grid-chip diff-hard"><b>HARD</b>7 escapes needed.</div>
-          <div class="grid-chip diff-impossible"><b>IMPOSSIBLE</b>10 escapes. Sub-second windows.</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2>CREATE ROOM</h2>
-      <input id="host-name" type="text" placeholder="Your name" maxlength="20" />
-      <select id="host-mode">
-        <option value="duel">1v1 / Duel</option>
-        <option value="team">2v2 / Team</option>
-        <option value="ffa" selected>FFA</option>
-      </select>
-      <select id="host-difficulty" onchange="updateDiffInfo()">
-        <option value="easy">Easy</option>
-        <option value="normal" selected>Normal</option>
-        <option value="hard">Hard</option>
-        <option value="impossible">☠ Impossible</option>
-      </select>
-      <div class="diff-info diff-normal" id="diff-info">
-        <div class="di"><span>Prep window</span><span id="di-prep">4.5s → 2.5s</span></div>
-        <div class="di"><span>Signal window</span><span id="di-sig">2.1s → 1.1s</span></div>
-        <div class="di"><span>Objective</span><span id="di-obj">5 escapes</span></div>
-        <div class="di"><span>Fake chance</span><span id="di-fake">33% → 60%</span></div>
-        <div class="desc" id="di-desc">Balanced challenge. Noticeably harder by round 8.</div>
-        <div class="scale-note">↑ Values tighten each round automatically</div>
-      </div>
-      <select id="host-rounds">
-        <option value="3">3 rounds — quick</option>
-        <option value="5" selected>5 rounds — standard</option>
-        <option value="8">8 rounds — extended</option>
-        <option value="12">12 rounds — marathon</option>
-        <option value="16">16 rounds — brutal</option>
-        <option value="20">20 rounds — endurance</option>
-        <option value="25">25 rounds — chaos</option>
-      </select>
-      <div class="error" id="create-error"></div>
-      <button class="btn-primary" id="create-btn" onclick="openCreatePopup()">CREATE ROOM</button>
-    </div>
-
-    <div class="card">
-      <h2>JOIN ROOM</h2>
-      <input id="join-name" type="text" placeholder="Your name" maxlength="20" />
-      <input id="join-code" type="text" placeholder="Room code" maxlength="5" style="text-transform:uppercase" />
-      <div class="error" id="join-error"></div>
-      <button class="btn-secondary" onclick="joinRoom()">JOIN ROOM</button>
-    </div>
-  </div>
-
-  <div id="screen-lobby" class="screen">
-    <div class="card">
-      <h2>ROOM CODE</h2>
-      <div class="room-code" id="lobby-code"></div>
-      <p style="color:#666;font-size:0.8rem;text-align:center;margin-bottom:16px">Share this code with friends</p>
-      <div style="text-align:center;margin-bottom:10px">
-        <span class="mode-badge" id="lobby-mode"></span>
-        <span class="game-diff-badge" id="lobby-diff"></span>
-      </div>
-      <h2>PLAYERS</h2>
-      <ul class="player-list" id="lobby-players"></ul>
-      <div style="margin-top:16px">
-        <div class="error" id="lobby-error"></div>
-        <button class="btn-primary" id="start-btn" onclick="startGame()" style="display:none">START GAME</button>
-        <p id="waiting-msg" style="text-align:center;color:#888;font-size:0.85rem">Waiting for host to start...</p>
-      </div>
-    </div>
-  </div>
-
-  <div id="screen-game" class="screen">
-    <div class="card" id="game-card">
-      <div>
-        <span class="phase-badge phase-prep" id="game-phase-badge">PREP</span>
-        <span class="mode-badge" id="game-mode-badge"></span>
-        <span class="game-diff-badge" id="game-diff-badge"></span>
-        <div class="progress-info">
-          <span id="game-round-info">Round 1 / 8</span>
-          <span id="game-score-info">0 / 0</span>
-        </div>
-      </div>
-
-      <div class="mod-banner normal" id="mod-banner">
-        <span id="mod-icon"></span>
-        <div>
-          <div id="mod-title"></div>
-          <div style="font-size:.75rem;font-weight:normal;opacity:.85" id="mod-desc"></div>
-        </div>
-      </div>
-
-      <div class="team-box" id="team-box" style="display:none"></div>
-
-      <div class="progress-info" style="margin-top:8px">
-        <span>PRESSURE</span>
-        <span id="esc-pct">0%</span>
-      </div>
-      <div class="timer-bar"><div class="timer-fill" id="timer-fill"></div></div>
-      <div class="timer-bar"><div class="esc-fill" id="esc-fill"></div></div>
-
-      <div class="reveal-flash" id="reveal-flash"></div>
-      <div class="held-strip" id="held-strip"></div>
-      <div class="real-signal-hint" id="rsh">REAL SIGNAL: <span class="rsh-val" id="rsh-val"></span></div>
-      <div class="message-box" id="game-message">Study the clues.</div>
-
-      <div id="powerup-card" style="display:none"></div>
-
-      <div class="clue-legend" id="clue-legend">
-        <div class="cl-row">
-          <div class="cl-group"><div class="cl-title">COLOUR</div><span class="go-clue">WARM→GO</span> · <span class="fake-clue">COOL→FAKE</span></div>
-          <div class="cl-group"><div class="cl-title">WORD</div><span class="go-clue">ODD→GO</span> · <span class="fake-clue">EVEN→FAKE</span></div>
-          <div class="cl-group"><div class="cl-title">LOCK</div><span class="go-clue">ODD→GO</span> · <span class="fake-clue">EVEN→FAKE</span></div>
-        </div>
-      </div>
-
-      <div class="clues">
-        <div class="clue" id="clue-a-tile">
-          <div class="clue-label">SIGNAL A</div>
-          <div class="clue-value" id="clue-a">-</div>
-        </div>
-        <div class="clue" id="clue-b-tile">
-          <div class="clue-label">SIGNAL B</div>
-          <div class="clue-value" id="clue-b">-</div>
-        </div>
-      </div>
-
-      <div class="lock-tile" id="lock-tile">
-        <div class="clue-label">LOCK CODE</div>
-        <div class="lock-code" id="lock-code">???</div>
-        <div class="lock-hint" id="lock-hint"></div>
-      </div>
-
-      <div class="double-counter" id="double-counter" style="display:none">○ ○</div>
-
-      <div class="react-zone" id="react-zone" style="display:none">
-        <div id="react-dial" class="react-dial">
-          <div class="react-half react-left" id="react-left">GO</div>
-          <div class="react-half react-right" id="react-right">FAKE</div>
-          <div id="react-slider" class="react-slider">HOLD</div>
-        </div>
-        <div id="react-hint" class="react-hint">Hold, slide to the answer, then release.</div>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2>PLAYERS</h2>
-      <ul class="scoreboard" id="scoreboard"></ul>
-      <h2 style="margin-top:16px">LIVE FEED</h2>
-      <div class="log-list" id="log-list"></div>
-    </div>
-  </div>
-
-  <div id="screen-end" class="screen">
-    <div class="card" style="text-align:center">
-      <div id="end-result" style="font-size:2rem;font-weight:bold;margin-bottom:14px"></div>
-      <div id="end-message" style="color:#888;margin-bottom:22px"></div>
-      <h2 style="margin-bottom:12px">FINAL SCORES</h2>
-      <ul class="scoreboard" id="end-scoreboard"></ul>
-      <div style="margin-top:22px">
-        <button class="btn-primary" onclick="goHome()">PLAY AGAIN</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<div id="create-modal" class="modal-overlay">
-  <div class="modal-card">
-    <h2>CONFIRM ROOM</h2>
-    <div class="modal-line"><span>NAME</span><span id="modal-name"></span></div>
-    <div class="modal-line"><span>MODE</span><span id="modal-mode"></span></div>
-    <div class="modal-line"><span>DIFFICULTY</span><span id="modal-diff"></span></div>
-    <div class="modal-line"><span>ROUNDS</span><span id="modal-rounds"></span></div>
-    <div class="modal-actions">
-      <button class="btn-secondary" onclick="closeCreatePopup()">CANCEL</button>
-      <button class="btn-primary" onclick="confirmCreateRoom()">CREATE</button>
-    </div>
-  </div>
-</div>
-
-<script>
-const socket = io(window.location.origin);
-
-const WARM_COLORS = new Set(["RED","ORANGE","YELLOW","WHITE"]);
-const COOL_COLORS = new Set(["BLUE","GREEN","PURPLE","CYAN"]);
-
-const DIFF = {
-  easy: { cls: "diff-easy", label: "EASY", desc: "Big windows. Good for chill matches.", prep: "8.5s → ~7s", sig: "4.8s → ~4s", obj: "8 HP" },
-  normal: { cls: "diff-normal", label: "NORMAL", desc: "Balanced competitive pacing.", prep: "7.6s → ~6s", sig: "4.2s → ~3.4s", obj: "7 HP" },
-  hard: { cls: "diff-hard", label: "HARD", desc: "Faster and much more punishing.", prep: "6.5s → ~5s", sig: "3.5s → ~2.8s", obj: "6 HP" },
-  impossible: { cls: "diff-impossible", label: "IMPOSSIBLE", desc: "Still playable, just brutal.", prep: "5.5s → ~4.5s", sig: "2.9s → ~2.2s", obj: "5 HP" },
-};
-
-const MODE = {
-  duel: { cls: "mode-duel", label: "1v1 DUEL" },
-  team: { cls: "mode-team", label: "2v2 TEAM" },
-  ffa: { cls: "mode-ffa", label: "FFA" },
-};
-
-const PU_META = {
-  SHIELD: { icon: "🛡", name: "SHIELD", desc: "Blocks your next wrong penalty." },
-  DOUBLE: { icon: "✕2", name: "DOUBLE", desc: "Doubles your next correct score." },
-  BOOST: { icon: "⚡", name: "BOOST", desc: "Adds more signal time to this round." },
-  REVEAL: { icon: "👁", name: "REVEAL", desc: "Privately tells you the real signal." },
-};
-
-let myCode = null;
-let mySocketId = null;
-let timerInterval = null;
-let lastPhase = null;
-let lastMessage = null;
-let myRevealSignal = null;
-let pendingCreateRoom = null;
-
-let audioCtx = null;
-let masterGain = null;
-let soundOn = true;
-let droneNodes = [];
-let pulseInterval = null;
-
-let reactLocked = false;
-let reactDialBound = false;
-let reactDragging = false;
-let reactLastX = 0;
-let currentReactMode = "normal";
-
-function addLog(title, msg, cls = "") {
-  const el = document.createElement("div");
-  el.className = `log-item ${cls}`;
-  el.innerHTML = `<strong>${title}</strong> ${msg}`;
-  const list = document.getElementById("log-list");
-  if (list) list.prepend(el);
+function makeCode() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let out = "";
+  for (let i = 0; i < 5; i++) out += chars[Math.floor(Math.random() * chars.length)];
+  return out;
 }
 
-socket.on("connect", () => {
-  mySocketId = socket.id;
-  addLog("System", "Connected.", "");
-});
+function rand(arr) {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
 
-socket.on("powerupReveal", ({ realSignal }) => {
-  myRevealSignal = realSignal;
-  const el = document.getElementById("reveal-flash");
-  if (el) {
-    el.textContent = realSignal === "go" ? "👁 REVEAL: Signal is GO — press GO!" : "👁 REVEAL: Signal is FAKE — press FAKE!";
-    el.className = "reveal-flash " + (realSignal === "go" ? "show-go" : "show-fake");
+function normToken(s) {
+  return String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+function caesar(str, shift) {
+  const n = ((shift % 26) + 26) % 26;
+  return [...String(str).toUpperCase()].map(ch => {
+    const c = ch.charCodeAt(0);
+    if (c < 65 || c > 90) return ch;
+    return String.fromCharCode(65 + ((c - 65 + n) % 26));
+  }).join("");
+}
+
+function reverseStr(str) {
+  return [...String(str)].reverse().join("");
+}
+
+function atbash(str) {
+  return [...String(str).toUpperCase()].map(ch => {
+    const c = ch.charCodeAt(0);
+    if (c < 65 || c > 90) return ch;
+    return String.fromCharCode(90 - (c - 65));
+  }).join("");
+}
+
+function oddPositions(str) {
+  return [...String(str)].filter((_, i) => i % 2 === 0).join("");
+}
+
+function maxPlayersForMode(mode) {
+  if (mode === "duel") return 2;
+  if (mode === "team") return 4;
+  if (mode === "escape") return 10;
+  return 10;
+}
+
+function minPlayersForMode(mode) {
+  if (mode === "duel") return 2;
+  if (mode === "team") return 4;
+  return 1;
+}
+
+function baseHpForDifficulty(diff) {
+  if (diff === "easy") return 8;
+  if (diff === "normal") return 7;
+  if (diff === "hard") return 6;
+  return 5;
+}
+
+function difficultyFor(room) {
+  const round = Math.max(1, room.round || 1);
+  const modeBoost = room.mode === "team" ? 1.18 : room.mode === "ffa" ? 1.08 : 1.0;
+  const roundFactor = Math.max(0.82, 1 - (round - 1) * 0.02) * modeBoost;
+  const fakeBoost = Math.min(0.22, (round - 1) * 0.012);
+
+  if (room.difficulty === "easy") {
+    return {
+      prep: Math.round(8500 * roundFactor),
+      signal: Math.round(4800 * roundFactor),
+      fakeChance: Math.min(0.50, 0.22 + fakeBoost),
+    };
   }
-  addLog("REVEAL", "You were privately shown the real signal.", "log-pu");
-  playPowerup();
-});
-
-socket.on("roomState", state => {
-  myCode = state.code;
-  if      (state.phase === "lobby")  showLobby(state);
-  else if (state.phase === "ended")  showEnd(state);
-  else                               showGame(state);
-});
-
-function initAudio() {
-  if (audioCtx) return;
-  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  masterGain = audioCtx.createGain();
-  masterGain.gain.value = 0.55;
-  masterGain.connect(audioCtx.destination);
-  startDrone();
-}
-
-function toggleSound() {
-  soundOn = !soundOn;
-  document.getElementById("sound-btn").textContent = soundOn ? "♪ SOUND ON" : "♪ SOUND OFF";
-  if (masterGain) masterGain.gain.setTargetAtTime(soundOn ? 0.55 : 0, audioCtx.currentTime, 0.1);
-}
-
-function note(freq, type, dur, vol, delay = 0) {
-  if (!audioCtx) return;
-  const osc = audioCtx.createOscillator(), g = audioCtx.createGain();
-  osc.type = type; osc.frequency.value = freq;
-  g.gain.setValueAtTime(0, audioCtx.currentTime + delay);
-  g.gain.linearRampToValueAtTime(vol, audioCtx.currentTime + delay + 0.02);
-  g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + delay + dur);
-  osc.connect(g); g.connect(masterGain);
-  osc.start(audioCtx.currentTime + delay); osc.stop(audioCtx.currentTime + delay + dur + 0.05);
-}
-
-function startDrone() {
-  stopDrone();
-  [55,82.4,110].forEach(f => {
-    const osc = audioCtx.createOscillator(), g = audioCtx.createGain();
-    osc.type = "sine"; osc.frequency.value = f; g.gain.value = 0.04;
-    osc.connect(g); g.connect(masterGain); osc.start(); droneNodes.push(osc,g);
-  });
-}
-
-function stopDrone() {
-  droneNodes.forEach(n => { try { n.stop?.(); n.disconnect?.(); } catch(e){} });
-  droneNodes = [];
-}
-
-function stopPulse()  {
-  if (pulseInterval) { clearInterval(pulseInterval); pulseInterval = null; }
-}
-
-function setAudioPhase(phase, diff, modifier) {
-  if (!audioCtx) return;
-  stopPulse();
-  if (phase === "prep") {
-    const spd = modifier === "bomb" ? 500 : modifier === "doublehit" ? 400 : { easy:1300,normal:1000,hard:800,impossible:550 }[diff] ?? 1000;
-    pulseInterval = setInterval(() => note(modifier === "bomb" ? 80 : 110, "sine", 0.18, 0.07), spd);
+  if (room.difficulty === "hard") {
+    return {
+      prep: Math.max(3800, Math.round(6500 * roundFactor)),
+      signal: Math.max(2200, Math.round(3500 * roundFactor)),
+      fakeChance: Math.min(0.70, 0.45 + fakeBoost),
+    };
   }
-  if (phase === "signal") {
-    if (modifier === "bomb") {
-      note(200,"square",0.1,0.2); note(150,"square",0.1,0.18,0.08);
-      pulseInterval = setInterval(() => { note(180,"sawtooth",0.12,0.14); note(120,"sawtooth",0.1,0.1,0.06); }, 220);
-    } else if (modifier === "doublehit") {
-      note(660,"square",0.06,0.2); note(880,"square",0.06,0.18,0.05);
-      pulseInterval = setInterval(() => { note(330,"sawtooth",0.08,0.12); note(440,"sawtooth",0.06,0.1,0.04); }, 170);
-    } else {
-      note(880,"square",0.08,0.15); note(1100,"square",0.08,0.12,0.05);
-      const spd = { easy:420,normal:320,hard:240,impossible:160 }[diff] ?? 320;
-      pulseInterval = setInterval(() => { note(220,"sawtooth",0.1,0.1); note(330,"sawtooth",0.08,0.08,0.05); }, spd);
-    }
+  if (room.difficulty === "impossible") {
+    return {
+      prep: Math.max(3000, Math.round(5500 * roundFactor)),
+      signal: Math.max(1800, Math.round(2900 * roundFactor)),
+      fakeChance: Math.min(0.88, 0.60 + fakeBoost * 1.5),
+    };
   }
-  if (phase === "resolve") { note(440,"triangle",0.3,0.1); note(550,"triangle",0.3,0.08,0.08); }
-}
-function playWin()     { if (!audioCtx) return; stopPulse(); [523,659,784,1047].forEach((f,i) => note(f,"triangle",0.4,0.18,i*0.12)); }
-function playLose()    { if (!audioCtx) return; stopPulse(); [392,349,294,220].forEach((f,i) => note(f,"sawtooth",0.4,0.14,i*0.14)); }
-function playMiss()    { if (!audioCtx) return; note(200,"sawtooth",0.3,0.22); note(150,"sawtooth",0.4,0.18,0.15); }
-function playPartial() { if (!audioCtx) return; note(660,"triangle",0.12,0.18); }
-function playDefuse()  { if (!audioCtx) return; stopPulse(); [300,500,700,1000].forEach((f,i) => note(f,"triangle",0.25,0.2,i*0.07)); }
-function playPowerup() { if (!audioCtx) return; note(880,"sine",0.1,0.2); note(1320,"sine",0.12,0.18,0.08); note(1760,"sine",0.1,0.15,0.18); }
-function playReact(ok) { ok ? (note(880,"sine",0.15,0.2), note(1320,"sine",0.15,0.18,0.1)) : (playMiss(), triggerShake()); }
-
-function toggleHTP() {
-  const body  = document.getElementById("htp-body");
-  const arrow = document.getElementById("htp-arrow");
-  body.classList.toggle("open");
-  arrow.textContent = body.classList.contains("open") ? "▲" : "▼";
+  return {
+    prep: Math.max(4200, Math.round(7600 * roundFactor)),
+    signal: Math.max(2400, Math.round(4200 * roundFactor)),
+    fakeChance: Math.min(0.60, 0.33 + fakeBoost),
+  };
 }
 
-function triggerShake() {
-  const app = document.getElementById("app");
-  document.body.classList.add("flash-miss");
-  app.classList.remove("shake"); void app.offsetWidth;
-  app.classList.add("shake");
-  setTimeout(() => { app.classList.remove("shake"); document.body.classList.remove("flash-miss"); }, 600);
+function getRoundModifier(room) {
+  const round = room.round || 1;
+  const diff = room.difficulty;
+  const rScale = Math.min(0.16, (round - 1) * 0.01);
+
+  const bombC = ({ easy: 0.05, normal: 0.10, hard: 0.16, impossible: 0.22 }[diff] ?? 0.10) + rScale;
+  const invertC = ({ easy: 0.10, normal: 0.18, hard: 0.26, impossible: 0.34 }[diff] ?? 0.18) + rScale;
+  const doubleC = ({ easy: 0.08, normal: 0.11, hard: 0.14, impossible: 0.18 }[diff] ?? 0.11) + rScale * 0.5;
+
+  const r = Math.random();
+  if (r < bombC) return "bomb";
+  if (r < bombC + invertC) return "inverted";
+  if (r < bombC + invertC + doubleC) return "doublehit";
+  return "normal";
 }
 
-function updateDiffInfo() {
-  const d = document.getElementById("host-difficulty").value;
-  const info = DIFF[d] || DIFF.normal;
-  document.getElementById("diff-info").className = "diff-info " + info.cls;
-  document.getElementById("di-prep").textContent = info.prep;
-  document.getElementById("di-sig").textContent = info.sig;
-  document.getElementById("di-obj").textContent = info.obj;
-  document.getElementById("di-fake").textContent = info.fake;
-  document.getElementById("di-desc").textContent = info.desc;
-  document.getElementById("create-btn").className = d === "impossible" ? "btn-impossible" : "btn-primary";
-}
-
-function showScreen(id) {
-  document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
-  document.getElementById(id).classList.add("active");
-}
-
-function openCreatePopup() {
-  initAudio();
-  const name = document.getElementById("host-name").value.trim() || "Host";
-  const diff = document.getElementById("host-difficulty").value;
-  const mode = document.getElementById("host-mode").value;
-  const rounds = parseInt(document.getElementById("host-rounds").value, 10);
-
-  pendingCreateRoom = { name, mode, difficulty: diff, totalRounds: rounds };
-
-  const modeLabel = { duel: "1v1 / Duel", team: "2v2 / Team", ffa: "FFA" }[mode] || mode.toUpperCase();
-  const diffLabel = { easy: "Easy", normal: "Normal", hard: "Hard", impossible: "Impossible" }[diff] || diff.toUpperCase();
-
-  document.getElementById("modal-name").textContent = name;
-  document.getElementById("modal-mode").textContent = modeLabel;
-  document.getElementById("modal-diff").textContent = diffLabel;
-  document.getElementById("modal-rounds").textContent = rounds;
-  document.getElementById("create-modal").style.display = "flex";
-}
-
-function closeCreatePopup() {
-  document.getElementById("create-modal").style.display = "none";
-}
-
-function confirmCreateRoom() {
-  if (!pendingCreateRoom) return;
-  document.getElementById("create-error").textContent = "";
-  document.getElementById("create-modal").style.display = "none";
-  socket.emit("createRoom", pendingCreateRoom, (res) => {
-    if (!res.ok) {
-      document.getElementById("create-error").textContent = res.error;
-      return;
-    }
-    myCode = res.code;
-    showLobby(res.state);
-  });
-  pendingCreateRoom = null;
-}
-
-function joinRoom() {
-  initAudio();
-  const name = document.getElementById("join-name").value.trim() || "Player";
-  const code = document.getElementById("join-code").value.trim().toUpperCase();
-  document.getElementById("join-error").textContent = "";
-  if (!code) { document.getElementById("join-error").textContent = "Enter a room code."; return; }
-  socket.emit("joinRoom", { code, name }, res => {
-    if (!res.ok) { document.getElementById("join-error").textContent = res.error; return; }
-    myCode = code; showLobby(res.state);
-  });
-}
-
-function showLobby(state) {
-  showScreen("screen-lobby");
-  stopPulse();
-  document.getElementById("lobby-code").textContent = state.code;
-  document.getElementById("lobby-mode").className = `mode-badge ${MODE[state.mode]?.cls || "mode-duel"}`;
-  document.getElementById("lobby-mode").textContent = MODE[state.mode]?.label || state.mode.toUpperCase();
-  const di = DIFF[state.difficulty] || DIFF.normal;
-  document.getElementById("lobby-diff").className = `game-diff-badge ${di.cls}`;
-  document.getElementById("lobby-diff").textContent = di.label;
-  renderPlayers("lobby-players", state);
-  const isHost = state.hostId === mySocketId;
-  document.getElementById("start-btn").style.display = isHost ? "block" : "none";
-  document.getElementById("waiting-msg").style.display = isHost ? "none" : "block";
-}
-
-function startGame() {
-  document.getElementById("lobby-error").textContent = "";
-  socket.emit("startGame", { code: myCode }, (res) => {
-    if (res && !res.ok) document.getElementById("lobby-error").textContent = res.error;
-  });
-}
-
-function clueAClass(clueA) {
-  if (!clueA) return "";
-  const color = clueA.split(" ")[0];
-  if (WARM_COLORS.has(color)) return "warm";
-  if (COOL_COLORS.has(color)) return "cool";
-  return "bomb-clue";
-}
-function clueBSignal(word) { return word && word.length % 2 === 1 ? "go" : "fake"; }
-function lockSignal(lock) {
-  if (!lock || lock === "!!!") return "bomb";
-  const n = parseInt(lock, 10);
-  return Number.isNaN(n) ? "bomb" : (n % 2 === 1 ? "go" : "fake");
-}
-
-function renderPowerupCard(state) {
-  const container = document.getElementById("powerup-card");
-  const pu = state.roundPowerup;
-  if (!pu || state.phase === "signal" || state.phase === "resolve") {
-    container.style.display = "none";
-    return;
+function buildClues(realType, modifier) {
+  if (modifier === "bomb") {
+    return { clueA: "ORANGE ✚", clueB: "ZERO", lock: "!!!" };
   }
-  const meta = PU_META[pu.type] || { icon: "?", name: pu.type, desc: "" };
-  const claimed = !!pu.claimedBy;
-  const claimedByMe = pu.claimedBy === mySocketId;
-  container.style.display = "block";
-  if (claimed) {
-    const who = claimedByMe ? "You" : (pu.claimedByName || "Someone");
-    container.innerHTML = `
-      <div class="powerup-card claimed">
-        <div class="pu-icon">${meta.icon}</div>
-        <div class="pu-info">
-          <div class="pu-name">${meta.name}</div>
-          <div class="pu-claimed-by">${who} claimed this powerup.</div>
-        </div>
-      </div>
-    `;
+  const isGo = realType === "go";
+  const colour = rand(isGo ? GO_COLORS : FAKE_COLORS);
+  const clueA = `${colour} ${rand(SHAPES)}`;
+  const clueB = rand(isGo ? GO_WORDS : FAKE_WORDS);
+  let lockNum;
+  do {
+    lockNum = Math.floor(100 + Math.random() * 900);
+  } while ((lockNum % 2 === 0) !== (!isGo));
+  return { clueA, clueB, lock: String(lockNum) };
+}
+
+function maybeSpawnPowerup() {
+  if (Math.random() > POWERUP_SPAWN_CHANCE) return null;
+  return { type: rand(POWERUP_TYPES), claimedBy: null, claimedByName: null };
+}
+
+function escapeTimeMs(diff) {
+  if (diff === "easy") return 80000;
+  if (diff === "normal") return 65000;
+  if (diff === "hard") return 50000;
+  return 40000;
+}
+
+function makeEscapePuzzle(room) {
+  const baseWord = rand(ESCAPE_WORDS);
+  const shift = 3 + Math.floor(Math.random() * 7);
+  const cipher = caesar(baseWord, shift);
+  const checksum = String((shift + room.round + baseWord.length) % 10);
+
+  let answer = baseWord;
+  let pages = [];
+  let mechanicLabel = "";
+
+  if (room.difficulty === "easy") {
+    answer = baseWord;
+    pages = [
+      `PAGE 1 — WHEEL CALIBRATION\nShift every letter BACK by ${shift}.`,
+      `PAGE 2 — FINAL STEP\nSubmit the recovered word exactly as written.`,
+    ];
+    mechanicLabel = "CAESAR";
+  } else if (room.difficulty === "normal") {
+    answer = reverseStr(baseWord);
+    pages = [
+      `PAGE 1 — WHEEL CALIBRATION\nShift every letter BACK by ${shift}.`,
+      `PAGE 2 — MIRROR RULE\nAfter decoding, reverse the word.`,
+      `PAGE 3 — FINAL STEP\nThe answer is the mirrored word.`,
+    ];
+    mechanicLabel = "CAESAR + MIRROR";
+  } else if (room.difficulty === "hard") {
+    answer = oddPositions(reverseStr(baseWord));
+    pages = [
+      `PAGE 1 — WHEEL CALIBRATION\nShift every letter BACK by ${shift}.`,
+      `PAGE 2 — MIRROR RULE\nAfter decoding, reverse the word.`,
+      `PAGE 3 — FRACTURE RULE\nKeep only letters in odd positions.`,
+      `PAGE 4 — FINAL STEP\nSubmit the fractured code.`,
+    ];
+    mechanicLabel = "CAESAR + MIRROR + ODD POSITIONS";
   } else {
-    container.innerHTML = `
-      <div class="powerup-card">
-        <div class="pu-icon">${meta.icon}</div>
-        <div class="pu-info">
-          <div class="pu-name">POWERUP: ${meta.name}</div>
-          <div class="pu-desc">${meta.desc}</div>
-        </div>
-        <button class="btn-claim" onclick="claimPowerup()">CLAIM</button>
-      </div>
-    `;
+    answer = atbash(oddPositions(reverseStr(baseWord))) + checksum;
+    pages = [
+      `PAGE 1 — WHEEL CALIBRATION\nShift every letter BACK by ${shift}.`,
+      `PAGE 2 — MIRROR RULE\nAfter decoding, reverse the word.`,
+      `PAGE 3 — FRACTURE RULE\nKeep only letters in odd positions.`,
+      `PAGE 4 — BLACK GLASS RULE\nApply Atbash to the remaining letters.`,
+      `PAGE 5 — FINAL CHECKSUM\nAppend the digit ${checksum} to the end.`,
+    ];
+    mechanicLabel = "CAESAR + MIRROR + ODD POSITIONS + ATBASH + CHECKSUM";
+  }
+
+  return {
+    id: `${room.code}-${room.round}-${Date.now()}`,
+    cipher,
+    answer: normToken(answer),
+    pages,
+    mechanicLabel,
+    timeMs: escapeTimeMs(room.difficulty),
+    shift,
+    checksum,
+    baseWord,
+  };
+}
+
+function initializeStats(room) {
+  const hp = baseHpForDifficulty(room.difficulty);
+  if (room.mode === "team") {
+    const teamHp = hp * 2;
+    room.teams = [
+      { id: "A", name: "Team A", score: 0, hp: teamHp, maxHp: teamHp },
+      { id: "B", name: "Team B", score: 0, hp: teamHp, maxHp: teamHp },
+    ];
+    room.players.forEach((p, i) => {
+      p.score = 0;
+      p.hp = hp;
+      p.maxHp = hp;
+      p.heldPowerup = null;
+      p.team = i % 2 === 0 ? "A" : "B";
+    });
+  } else {
+    room.teams = null;
+    room.players.forEach((p) => {
+      p.score = 0;
+      p.hp = hp;
+      p.maxHp = hp;
+      p.heldPowerup = null;
+      p.team = null;
+    });
   }
 }
 
-function claimPowerup() {
-  socket.emit("claimPowerup", { code: myCode }, (res) => {
-    if (res?.ok) {
-      playPowerup();
-      addLog("POWERUP", `You claimed ${res.type}!`, "log-pu");
-    }
-  });
+function addScore(room, player, points) {
+  player.score += points;
+  if (room.mode === "team" && room.teams && player.team) {
+    const team = room.teams.find((t) => t.id === player.team);
+    if (team) team.score += points;
+  }
 }
 
-function renderPlayers(listId, state) {
-  const el = document.getElementById(listId);
-  if (!el) return;
-  el.innerHTML = [...state.players]
-    .sort((a, b) => b.score - a.score || b.hp - a.hp)
-    .map((p) => {
-      const pBadge = p.heldPowerup ? `<span class="pu-badge pu-${p.heldPowerup.toLowerCase()}">${PU_META[p.heldPowerup]?.icon || p.heldPowerup}</span>` : "";
-      const team = state.mode === "team" ? `<span class="team">Team ${p.team}</span>` : "";
-      return `<li class="${p.id === state.hostId ? "host" : ""}">
-        <span>${p.id === state.hostId ? "★ " : ""}${p.name}${team}${pBadge}</span>
-        <span class="score">${p.score} pts <span class="hp">HP ${p.hp}/${p.maxHp}</span></span>
-      </li>`;
-    }).join("");
-}
-
-function updateTimer(state) {
-  clearInterval(timerInterval);
-  const fill = document.getElementById("timer-fill");
-  if (!state.stageEndsAt) {
-    fill.style.width = "0%";
+function damageEntity(room, player, amount) {
+  if (room.mode === "team" && room.teams && player.team) {
+    const team = room.teams.find((t) => t.id === player.team);
+    if (team) team.hp = Math.max(0, team.hp - amount);
     return;
   }
-  const totalMs = state.stageTotalMs || 4500;
-  const mod = state.roundModifier || "normal";
-  function tick() {
-    const rem = state.stageEndsAt - Date.now();
-    const pct = Math.max(0, Math.min(100, (rem / totalMs) * 100));
-    fill.style.width = pct + "%";
-    fill.className = "timer-fill" + (mod === "bomb" ? " bomb" : "") + (pct < 30 ? " urgent" : "");
-    document.getElementById("esc-pct").textContent = Math.round(100 - pct) + "%";
-    document.getElementById("esc-fill").style.width = Math.round(100 - pct) + "%";
-    if (rem <= 0) clearInterval(timerInterval);
+  player.hp = Math.max(0, player.hp - amount);
+}
+
+function aliveTeams(room) {
+  if (room.mode !== "team" || !room.teams) return [];
+  return room.teams.filter((t) => t.hp > 0);
+}
+
+function alivePlayers(room) {
+  return room.players.filter((p) => p.hp > 0);
+}
+
+function finalTitle(room) {
+  if (room.mode === "escape") {
+    return room.escape?.strikes >= 3 ? "Escape failed." : "Escape cleared.";
   }
-  tick();
-  timerInterval = setInterval(tick, 100);
+  if (room.mode === "team" && room.teams) {
+    const [a, b] = [...room.teams].sort((x, y) => y.score - x.score || y.hp - x.hp);
+    if (a.score === b.score && a.hp === b.hp) return "Draw.";
+    return `${a.name} wins.`;
+  }
+  const sorted = [...room.players].sort((a, b) => b.score - a.score || b.hp - a.hp);
+  if (!sorted.length) return "Draw.";
+  const top = sorted[0];
+  const tied = sorted.filter((p) => p.score === top.score && p.hp === top.hp);
+  if (tied.length > 1) return "Draw.";
+  return `${top.name} wins.`;
 }
 
-function bindReactDial() {
-  if (reactDialBound) return;
-  const dial = document.getElementById("react-dial");
-  if (!dial) return;
-  const slider = document.getElementById("react-slider");
-  const getClientX = (e) => e.clientX ?? e.touches?.[0]?.clientX ?? 0;
-
-  const update = (e) => {
-    if (!reactDragging || reactLocked) return;
-    const rect = dial.getBoundingClientRect();
-    const x = Math.max(0, Math.min(rect.width, getClientX(e) - rect.left));
-    reactLastX = x;
-    const pct = (x / rect.width) * 100;
-    slider.style.left = pct + "%";
-    slider.style.transform = "translate(-50%,-50%) scale(1.06)";
-    if (currentReactMode === "bomb") {
-      slider.textContent = "DEFUSE";
-      slider.classList.add("chosen-bomb");
-      slider.classList.remove("chosen-go", "chosen-fake");
-    } else {
-      slider.textContent = pct < 50 ? "GO" : "FAKE";
-      slider.classList.toggle("chosen-go", pct < 50);
-      slider.classList.toggle("chosen-fake", pct >= 50);
-      slider.classList.remove("chosen-bomb");
-    }
-  };
-
-  const start = (e) => {
-    if (reactLocked) return;
-    reactDragging = true;
-    dial.classList.add("active");
-    update(e);
-    e.preventDefault?.();
-  };
-
-  const end = () => {
-    if (!reactDragging || reactLocked) return;
-    reactDragging = false;
-    dial.classList.remove("active");
-
-    let type = "go";
-    if (currentReactMode === "bomb") {
-      type = "bomb";
-    } else {
-      const rect = dial.getBoundingClientRect();
-      const pct = rect.width ? (reactLastX / rect.width) * 100 : 50;
-      type = pct < 50 ? "go" : "fake";
-    }
-
-    lockAndSend(type);
-    if (currentReactMode !== "doublehit") {
-      reactLocked = true;
-    }
-  };
-
-  dial.addEventListener("pointerdown", start);
-  dial.addEventListener("pointermove", update);
-  window.addEventListener("pointerup", end);
-  window.addEventListener("pointercancel", end);
-  reactDialBound = true;
+function shouldEnd(room) {
+  if (room.mode === "escape") return room.escape?.strikes >= 3 || room.round > room.totalRounds;
+  if (room.round > room.totalRounds) return true;
+  if (room.mode === "team") return aliveTeams(room).length <= 1;
+  return alivePlayers(room).length <= 1;
 }
 
-function resetReactDial() {
-  const dial = document.getElementById("react-dial");
-  const slider = document.getElementById("react-slider");
-  if (!dial || !slider) return;
-  slider.style.left = "50%";
-  slider.style.transform = "translate(-50%,-50%)";
-  slider.textContent = currentReactMode === "bomb" ? "DEFUSE" : "HOLD";
-  slider.classList.remove("chosen-go", "chosen-fake", "chosen-bomb");
-  dial.classList.remove("locked", "active");
-  reactDragging = false;
-  reactLastX = 0;
+function publicRoom(room) {
+  return {
+    code: room.code,
+    hostId: room.hostId,
+    phase: room.phase,
+    mode: room.mode,
+    round: room.round,
+    totalRounds: room.totalRounds,
+    difficulty: room.difficulty,
+    message: room.message,
+    teams: room.teams,
+
+    escape: room.mode === "escape" ? {
+      strikes: room.escape?.strikes ?? 0,
+      solved: room.escape?.solved ?? 0,
+      total: room.escape?.total ?? room.totalRounds,
+      currentPuzzle: room.currentPuzzle ? {
+        cipher: room.currentPuzzle.cipher,
+        pages: room.currentPuzzle.pages,
+        mechanicLabel: room.currentPuzzle.mechanicLabel,
+        timeEndsAt: room.currentPuzzle.timeEndsAt,
+        timeMs: room.currentPuzzle.timeMs,
+      } : null,
+    } : null,
+
+    clueA: room.currentRound?.clueA ?? null,
+    clueB: room.currentRound?.clueB ?? null,
+    lock: room.currentRound?.lock ?? null,
+    roundModifier: room.currentRound?.roundModifier ?? "normal",
+    realSignal: room.currentRound?.realSignal ?? null,
+    signalType: room.currentRound?.signalType ?? null,
+    signalOpen: room.currentRound?.signalOpen ?? false,
+    stageEndsAt: room.mode === "escape" ? room.currentPuzzle?.timeEndsAt ?? null : room.currentRound?.stageEndsAt ?? null,
+    stageTotalMs: room.mode === "escape" ? room.currentPuzzle?.timeMs ?? null : room.currentRound?.stageTotalMs ?? null,
+    doubleHit: room.currentRound?.doubleHit ?? 0,
+    roundPowerup: room.currentRound?.roundPowerup ?? null,
+    players: room.players.map((p) => ({
+      id: p.id,
+      name: p.name,
+      score: p.score,
+      hp: p.hp,
+      maxHp: p.maxHp,
+      team: p.team,
+      heldPowerup: p.heldPowerup ?? null,
+    })),
+  };
 }
 
-function lockAndSend(type) {
-  if (reactLocked && currentReactMode !== "doublehit") return;
-  const dial = document.getElementById("react-dial");
-  const hint = document.getElementById("react-hint");
-  const slider = document.getElementById("react-slider");
+function emitRoom(room) {
+  io.to(room.code).emit("roomState", publicRoom(room));
+}
 
-  if (type === "go") slider.classList.add("chosen-go");
-  if (type === "fake") slider.classList.add("chosen-fake");
-  if (type === "bomb") slider.classList.add("chosen-bomb");
+function finishGame(room, message) {
+  room.phase = "ended";
+  room.message = message || finalTitle(room);
+  if (room.currentRound) room.currentRound.signalOpen = false;
+  emitRoom(room);
+}
 
-  if (dial) dial.classList.add("locked");
-  if (hint) hint.textContent = "Submitting...";
+function startResolveThenNext(room) {
+  room.phase = "resolve";
+  if (room.currentRound) room.currentRound.signalOpen = false;
+  emitRoom(room);
 
-  socket.emit("reaction", { code: myCode, type }, (res) => {
-    if (!res) return;
+  setTimeout(() => {
+    const fresh = rooms.get(room.code);
+    if (!fresh) return;
 
-    if (res.partial) {
-      playPartial();
-      reactLocked = false;
-      if (dial) dial.classList.remove("locked");
-      if (hint) {
-        if (currentReactMode === "doublehit") hint.textContent = "Release again.";
-        else hint.textContent = "Hold, slide to the answer, then release.";
-      }
+    if (fresh.mode === "escape") {
+      if (fresh.escape?.strikes >= 3) return finishGame(fresh, "Escape failed.");
+      if (fresh.round >= fresh.totalRounds) return finishGame(fresh, "Escape cleared.");
+      fresh.round += 1;
+      startEscapePuzzle(fresh);
       return;
     }
 
-    if (type === "bomb") playDefuse();
-    else {
-      if (audioCtx) playReact(res.ok !== false);
-      else if (res.ok === false) triggerShake();
+    if (shouldEnd(fresh)) {
+      finishGame(fresh, finalTitle(fresh));
+      return;
     }
 
-    if (res.ok === false && !res.shielded) triggerShake();
+    if (fresh.round >= fresh.totalRounds) {
+      finishGame(fresh, finalTitle(fresh));
+      return;
+    }
+
+    fresh.round += 1;
+    startPrep(fresh);
+  }, 1200);
+}
+
+function startSignal(room) {
+  const cfg = difficultyFor(room);
+  const modifier = room.currentRound.roundModifier;
+  const boostMs = room.currentRound.boostApplied ? 900 : 0;
+  const sigMs = cfg.signal + boostMs;
+
+  room.phase = "signal";
+  room.currentRound.signalOpen = true;
+  room.currentRound.stageEndsAt = Date.now() + sigMs;
+  room.currentRound.stageTotalMs = sigMs;
+
+  if (modifier === "bomb") {
+    room.currentRound.signalType = "bomb";
+    room.message = "💣 DEFUSE IT!";
+  } else if (modifier === "inverted") {
+    const real = room.currentRound.realSignal;
+    room.currentRound.signalType = real;
+    room.message = real === "go" ? "FAKE SIGNAL!" : "GO!";
+  } else if (modifier === "doublehit") {
+    room.currentRound.signalType = "go";
+    room.currentRound.doubleHit = 0;
+    room.message = "HIT TWICE! GO GO!";
+  } else {
+    room.message = room.currentRound.signalType === "go" ? "GO!" : "FAKE SIGNAL!";
+  }
+
+  emitRoom(room);
+
+  setTimeout(() => {
+    const fresh = rooms.get(room.code);
+    if (!fresh || fresh.phase !== "signal" || !fresh.currentRound || !fresh.currentRound.signalOpen) return;
+
+    fresh.currentRound.signalOpen = false;
+    const mod = fresh.currentRound.roundModifier;
+    const st = fresh.currentRound.signalType;
+
+    if (mod === "bomb") fresh.message = "💥 Bomb exploded.";
+    else if (mod === "doublehit") {
+      if ((fresh.currentRound.doubleHit || 0) < 2) fresh.message = "Too slow — needed two hits.";
+      else fresh.message = "Chain completed.";
+    } else if (st === "go") {
+      fresh.message = "Too slow.";
+    } else {
+      fresh.message = "Fake signal — held steady.";
+    }
+
+    startResolveThenNext(fresh);
+  }, sigMs);
+}
+
+function startPrep(room) {
+  const cfg = difficultyFor(room);
+  const modifier = getRoundModifier(room);
+
+  let realSignal, signalType;
+  if (modifier === "bomb") {
+    realSignal = "bomb";
+    signalType = "bomb";
+  } else {
+    const isGo = Math.random() >= cfg.fakeChance;
+    realSignal = isGo ? "go" : "fake";
+    signalType = isGo ? "go" : "fake";
+  }
+
+  const clues = buildClues(realSignal, modifier);
+
+  room.currentRound = {
+    ...clues,
+    roundModifier: modifier,
+    roundPowerup: maybeSpawnPowerup(),
+    signalOpen: false,
+    stageEndsAt: Date.now() + cfg.prep,
+    stageTotalMs: cfg.prep,
+    doubleHit: 0,
+    boostApplied: false,
+    realSignal,
+    signalType,
+  };
+
+  room.phase = "prep";
+  room.message = "Study the clues.";
+  emitRoom(room);
+
+  setTimeout(() => {
+    const fresh = rooms.get(room.code);
+    if (!fresh || fresh.phase === "ended") return;
+    if (fresh.currentRound?.stageEndsAt && Date.now() >= fresh.currentRound.stageEndsAt - 5) {
+      startSignal(fresh);
+    }
+  }, cfg.prep);
+}
+
+function startEscapePuzzle(room) {
+  const puzzle = makeEscapePuzzle(room);
+  room.currentPuzzle = {
+    ...puzzle,
+    timeEndsAt: Date.now() + puzzle.timeMs,
+  };
+  room.phase = "escape";
+  room.message = `Puzzle ${room.round} / ${room.totalRounds}`;
+  emitRoom(room);
+
+  const puzzleId = puzzle.id;
+
+  setTimeout(() => {
+    const fresh = rooms.get(room.code);
+    if (!fresh || fresh.phase !== "escape" || fresh.currentPuzzle?.id !== puzzleId) return;
+
+    fresh.escape.strikes += 1;
+    fresh.message = `Time expired. Strike ${fresh.escape.strikes}/3.`;
+
+    if (fresh.escape.strikes >= 3) {
+      finishGame(fresh, "Escape failed.");
+      return;
+    }
+
+    fresh.round += 1;
+    if (fresh.round > fresh.totalRounds) {
+      finishGame(fresh, "Escape cleared.");
+      return;
+    }
+
+    startEscapePuzzle(fresh);
+  }, puzzle.timeMs);
+}
+
+io.on("connection", socket => {
+  socket.on("createRoom", ({ name, difficulty, totalRounds, mode }, cb) => {
+    const diff = VALID_DIFFS.includes(difficulty) ? difficulty : "normal";
+    const gameMode = VALID_MODES.includes(mode) ? mode : "ffa";
+    const code = makeCode();
+    const room = {
+      code,
+      hostId: socket.id,
+      phase: "lobby",
+      mode: gameMode,
+      round: 1,
+      totalRounds: Math.max(1, Math.min(25, Number(totalRounds) || 8)),
+      difficulty: diff,
+      players: [{
+        id: socket.id,
+        name: String(name || "Host").slice(0, 20),
+        score: 0,
+        hp: baseHpForDifficulty(diff),
+        maxHp: baseHpForDifficulty(diff),
+        heldPowerup: null,
+        team: gameMode === "team" ? "A" : null,
+      }],
+      teams: null,
+      currentRound: null,
+      currentPuzzle: null,
+      escape: gameMode === "escape" ? { strikes: 0, solved: 0, total: Math.max(1, Math.min(25, Number(totalRounds) || 8)) } : null,
+      message: "Room created.",
+    };
+
+    if (gameMode === "team") {
+      room.teams = [
+        { id: "A", name: "Team A", score: 0, hp: baseHpForDifficulty(diff) * 2, maxHp: baseHpForDifficulty(diff) * 2 },
+        { id: "B", name: "Team B", score: 0, hp: baseHpForDifficulty(diff) * 2, maxHp: baseHpForDifficulty(diff) * 2 },
+      ];
+    }
+
+    rooms.set(code, room);
+    socket.join(code);
+    cb?.({ ok: true, code, state: publicRoom(room) });
+    emitRoom(room);
+  });
+
+  socket.on("joinRoom", ({ code, name }, cb) => {
+    code = String(code || "").toUpperCase().trim();
+    const room = rooms.get(code);
+
+    if (!room) return cb?.({ ok: false, error: "Room not found." });
+    if (room.phase !== "lobby") return cb?.({ ok: false, error: "Game already started." });
+    if (room.players.some((p) => p.id === socket.id)) return cb?.({ ok: true, state: publicRoom(room) });
+    if (room.players.length >= maxPlayersForMode(room.mode)) return cb?.({ ok: false, error: "Room is full." });
+
+    const player = {
+      id: socket.id,
+      name: String(name || `Player ${room.players.length + 1}`).slice(0, 20),
+      score: 0,
+      hp: baseHpForDifficulty(room.difficulty),
+      maxHp: baseHpForDifficulty(room.difficulty),
+      heldPowerup: null,
+      team: room.mode === "team" ? ((room.players.filter((p) => p.team === "A").length <= room.players.filter((p) => p.team === "B").length) ? "A" : "B") : null,
+    };
+
+    room.players.push(player);
+
+    if (room.mode === "team" && room.teams) {
+      room.teams = [
+        {
+          id: "A",
+          name: "Team A",
+          score: 0,
+          hp: room.players.filter((p) => p.team === "A").length * baseHpForDifficulty(room.difficulty),
+          maxHp: room.players.filter((p) => p.team === "A").length * baseHpForDifficulty(room.difficulty),
+        },
+        {
+          id: "B",
+          name: "Team B",
+          score: 0,
+          hp: room.players.filter((p) => p.team === "B").length * baseHpForDifficulty(room.difficulty),
+          maxHp: room.players.filter((p) => p.team === "B").length * baseHpForDifficulty(room.difficulty),
+        },
+      ];
+    }
+
+    socket.join(code);
+    cb?.({ ok: true, state: publicRoom(room) });
+    emitRoom(room);
+  });
+
+  socket.on("startGame", ({ code }, cb) => {
+    code = String(code || "").toUpperCase().trim();
+    const room = rooms.get(code);
+    if (!room) return cb?.({ ok: false, error: "Room not found." });
+    if (room.hostId !== socket.id) return cb?.({ ok: false, error: "Only the host can start." });
+    if (room.players.length < minPlayersForMode(room.mode)) {
+      return cb?.({ ok: false, error: `Need at least ${minPlayersForMode(room.mode)} player(s).` });
+    }
+
+    room.phase = "starting";
+    room.message = "Starting...";
+    emitRoom(room);
 
     setTimeout(() => {
-      if (currentReactMode !== "doublehit") {
-        reactLocked = true;
+      const fresh = rooms.get(code);
+      if (!fresh) return;
+
+      fresh.round = 1;
+      fresh.completed = 0;
+      fresh.message = "Starting...";
+
+      fresh.players.forEach(p => {
+        p.score = 0;
+        p.heldPowerup = null;
+        if (fresh.mode === "escape") {
+          p.hp = 0;
+          p.maxHp = 0;
+          p.team = null;
+        }
+      });
+
+      if (fresh.mode === "escape") {
+        fresh.escape = { strikes: 0, solved: 0, total: fresh.totalRounds };
+        startEscapePuzzle(fresh);
+        cb?.({ ok: true });
+        return;
       }
-      if (dial) dial.classList.remove("locked");
-      resetReactDial();
-      if (hint) {
-        if (currentReactMode === "bomb") hint.textContent = "Hold, slide, release to defuse.";
-        else if (currentReactMode === "doublehit") hint.textContent = "Release again.";
-        else hint.textContent = "Hold, slide to the answer, then release.";
-      }
-    }, 220);
+
+      fresh.objective = difficultyFor({ difficulty: fresh.difficulty, round: 1 }).objective;
+      initializeStats(fresh);
+      startPrep(fresh);
+      cb?.({ ok: true });
+    }, 700);
   });
-}
 
-function showGame(state) {
-  showScreen("screen-game");
-  const phaseMap = { prep:["prep","PREP"], signal:["signal","SIGNAL"], resolve:["resolve","RESOLVE"], starting:["lobby","STARTING"] };
-  const [pCls, pLabel] = phaseMap[state.phase] || ["lobby", state.phase.toUpperCase()];
-  const badge = document.getElementById("game-phase-badge");
-  badge.className = `phase-badge phase-${pCls}`;
-  badge.textContent = pLabel;
-
-  const diff = state.difficulty || "normal";
-  const di = DIFF[diff] || DIFF.normal;
-  const db = document.getElementById("game-diff-badge");
-  db.className = `game-diff-badge ${di.cls}`;
-  db.textContent = di.label;
-
-  const mode = MODE[state.mode] || MODE.duel;
-  const mBadge = document.getElementById("game-mode-badge");
-  mBadge.className = `mode-badge ${mode.cls}`;
-  mBadge.textContent = mode.label;
-
-  const modifier = state.roundModifier || "normal";
-  currentReactMode = modifier;
-
-  const mod = {
-    normal: { cls: "normal", icon: "", title: "NORMAL ROUND", desc: "Read the clues." },
-    inverted: { cls: "inverted", icon: "⚠", title: "INVERTED", desc: "The signal lies. Clues are still true." },
-    bomb: { cls: "bomb", icon: "💣", title: "BOMB ROUND", desc: "Hold and release to DEFUSE." },
-    doublehit: { cls: "double", icon: "⚡", title: "DOUBLE HIT", desc: "Release twice before time runs out." },
-  }[modifier] || { cls: "normal", icon: "", title: "NORMAL ROUND", desc: "Read the clues." };
-
-  const banner = document.getElementById("mod-banner");
-  banner.className = `mod-banner show ${mod.cls}`;
-  document.getElementById("mod-icon").textContent = mod.icon;
-  document.getElementById("mod-title").textContent = mod.title;
-  document.getElementById("mod-desc").textContent = mod.desc;
-
-  document.getElementById("game-round-info").textContent = `Round ${state.round} / ${state.totalRounds}`;
-  document.getElementById("game-score-info").textContent = state.mode === "team" && state.teams
-    ? `${state.teams[0]?.score || 0} vs ${state.teams[1]?.score || 0}`
-    : `${state.players.reduce((a, p) => a + p.score, 0)} total pts`;
-
-  const teamBox = document.getElementById("team-box");
-  if (state.mode === "team" && state.teams?.length) {
-    teamBox.style.display = "block";
-    teamBox.innerHTML = state.teams.map((t, idx) => {
-      const pct = t.maxHp ? Math.max(0, (t.hp / t.maxHp) * 100) : 0;
-      return `
-        <div style="margin-bottom:${idx === 0 ? 10 : 0}px">
-          <div class="team-row"><span>${t.name}</span><span>${t.score} pts · HP ${t.hp}/${t.maxHp}</span></div>
-          <div class="bar"><div class="fill ${idx === 1 ? "b" : ""}" style="width:${pct}%"></div></div>
-        </div>
-      `;
-    }).join("");
-  } else {
-    teamBox.style.display = "none";
-    teamBox.innerHTML = "";
-  }
-
-  const rsh = document.getElementById("rsh");
-  if (modifier === "inverted" && state.phase === "prep" && state.realSignal) {
-    rsh.className = "real-signal-hint visible";
-    const rv = document.getElementById("rsh-val");
-    rv.textContent = state.realSignal === "go" ? "GO — press GO" : "FAKE — press FAKE";
-    rv.className   = "rsh-val " + (state.realSignal === "go" ? "rsh-go" : "rsh-fake");
-  } else {
-    rsh.className = "real-signal-hint";
-  }
-
-  if (state.phase !== "prep") {
-    const revealFlash = document.getElementById("reveal-flash");
-    if (myRevealSignal && state.phase === "resolve") {
-      myRevealSignal = null;
-      revealFlash.className = "reveal-flash";
+  socket.on("claimPowerup", ({ code }, cb) => {
+    code = String(code || "").toUpperCase().trim();
+    const room = rooms.get(code);
+    if (!room || room.mode === "escape") return cb?.({ ok: false, error: "No powerups in this mode." });
+    if (!room || room.phase !== "prep" || !room.currentRound?.roundPowerup) {
+      return cb?.({ ok: false, error: "No powerup available." });
     }
-  }
-  if (state.phase === "prep") {
-    myRevealSignal = null;
-    document.getElementById("reveal-flash").className = "reveal-flash";
-  }
 
-  const msgEl = document.getElementById("game-message");
-  msgEl.textContent = state.message || "";
-  msgEl.className = "message-box";
-  const msg = state.message || "";
-  if (msg === "GO!" || msg === "HIT TWICE! GO GO!") msgEl.classList.add(modifier === "doublehit" ? "message-double" : "message-go");
-  if (msg === "FAKE SIGNAL!") msgEl.classList.add("message-fake");
-  if (msg === "💣 DEFUSE IT!") msgEl.classList.add("message-bomb");
+    const pu = room.currentRound.roundPowerup;
+    if (pu.claimedBy) return cb?.({ ok: false, error: "Already claimed." });
 
-  const clueATile = document.getElementById("clue-a-tile");
-  document.getElementById("clue-a").textContent = state.clueA || "-";
-  clueATile.className = "clue" + (modifier === "bomb" ? " bomb-clue" : (state.clueA ? " " + clueAClass(state.clueA) : ""));
+    const player = room.players.find((p) => p.id === socket.id);
+    if (!player) return cb?.({ ok: false, error: "Not in room." });
+    if (player.heldPowerup) return cb?.({ ok: false, error: "You already hold a powerup." });
 
-  const clueBTile = document.getElementById("clue-b-tile");
-  const clueBVal  = document.getElementById("clue-b");
-  clueBVal.textContent = state.clueB || "-";
-  if (modifier === "bomb") {
-    clueBTile.className = "clue bomb-clue";
-    clueBVal.style.color = "#ff9900";
-  } else if (state.clueB) {
-    const bSig = clueBSignal(state.clueB);
-    clueBTile.className = "clue " + (bSig === "go" ? "warm" : "cool");
-    clueBVal.style.color = bSig === "go" ? "#00ff88" : "#ff3355";
-  } else {
-    clueBTile.className = "clue";
-    clueBVal.style.color = "";
-  }
+    pu.claimedBy = socket.id;
+    pu.claimedByName = player.name;
 
-  const lockTile = document.getElementById("lock-tile");
-  const lockHint = document.getElementById("lock-hint");
-  document.getElementById("lock-code").textContent = state.lock || "???";
-  if (modifier === "bomb" || state.lock === "!!!") {
-    lockTile.className = "lock-tile bomb-clue";
-    lockHint.textContent = "";
-  } else {
-    const lSig = lockSignal(state.lock);
-    lockTile.className = "lock-tile " + (lSig === "go" ? "warm" : "cool");
-    lockHint.textContent = lSig === "go" ? "ODD → GO" : "EVEN → FAKE";
-  }
-
-  document.getElementById("clue-legend").style.display = state.phase === "prep" ? "block" : "none";
-
-  renderPowerupCard(state);
-
-  const myPlayer = state.players.find(p => p.id === mySocketId);
-  const heldStrip = document.getElementById("held-strip");
-  if (myPlayer?.heldPowerup) {
-    const m = PU_META[myPlayer.heldPowerup] || {};
-    heldStrip.className = "held-strip visible";
-    heldStrip.innerHTML = `<span style="font-size:1.2rem">${m.icon||"?"}</span><span>${m.name||myPlayer.heldPowerup} READY — auto-activates on next reaction</span>`;
-  } else {
-    heldStrip.className = "held-strip";
-    heldStrip.innerHTML = "";
-  }
-
-  const reactZone = document.getElementById("react-zone");
-  const open = state.phase === "signal" && state.signalOpen;
-  reactZone.style.display = open ? "block" : "none";
-  if (open) {
-    bindReactDial();
-    reactLocked = false;
-    const dial = document.getElementById("react-dial");
-    if (dial) dial.classList.remove("locked");
-    resetReactDial();
-    const hint = document.getElementById("react-hint");
-    if (hint) {
-      if (modifier === "bomb") hint.textContent = "Hold, slide, release to defuse.";
-      else if (modifier === "doublehit") hint.textContent = "Hold, release, then do it again.";
-      else hint.textContent = "Hold, slide to the answer, then release.";
+    if (pu.type === "BOOST") {
+      room.currentRound.boostApplied = true;
+      room.message = `${player.name} activated BOOST — longer signal window!`;
+      emitRoom(room);
+      cb?.({ ok: true, type: pu.type });
+      return;
     }
-  } else {
-    reactLocked = false;
-    resetReactDial();
-  }
 
-  document.getElementById("timer-fill").className = "timer-fill" + (modifier === "bomb" ? " bomb" : "");
-  if (state.phase !== lastPhase) {
-    setAudioPhase(state.phase, diff, modifier);
-    lastPhase = state.phase;
-  }
+    if (pu.type === "REVEAL") {
+      socket.emit("powerupReveal", { realSignal: room.currentRound.realSignal });
+      room.message = `${player.name} used REVEAL.`;
+      emitRoom(room);
+      cb?.({ ok: true, type: pu.type, consumed: true });
+      return;
+    }
 
-  updateTimer(state);
-  renderPlayers("scoreboard", state);
+    player.heldPowerup = pu.type;
+    room.message = `${player.name} grabbed ${pu.type}!`;
+    emitRoom(room);
+    cb?.({ ok: true, type: pu.type });
+  });
 
-  if (state.message && state.phase === "resolve" && state.message !== lastMessage) {
-    lastMessage = state.message;
-    addLog("Round", state.message, "");
-  }
-}
+  socket.on("reaction", ({ code, type }, cb) => {
+    code = String(code || "").toUpperCase().trim();
+    const room = rooms.get(code);
+    if (!room || room.mode === "escape") return cb?.({ ok: false, error: "Use the escape puzzle submit box." });
+    if (!room || room.phase !== "signal" || !room.currentRound?.signalOpen) {
+      return cb?.({ ok: false, error: "No active signal." });
+    }
 
-function react(type) {
-  lockAndSend(type);
-}
+    const player = room.players.find((p) => p.id === socket.id);
+    if (!player) return cb?.({ ok: false, error: "Not in room." });
 
-function showEnd(state) {
-  showScreen("screen-end");
-  clearInterval(timerInterval);
-  stopPulse();
-  lastPhase = null;
-  lastMessage = null;
-  myRevealSignal = null;
-  reactLocked = false;
+    const modifier = room.currentRound.roundModifier;
+    const target = room.currentRound.signalType;
+    const cfg = difficultyFor(room);
+    const damage = Math.max(1, (room.difficulty === "easy" ? 1 : room.difficulty === "normal" ? 1 : 2) + Math.floor((room.round - 1) / 2));
+    const fastBonus = Math.max(0, Math.floor((room.currentRound.stageEndsAt - Date.now()) / 650));
 
-  const r = document.getElementById("end-result");
-  r.textContent = state.message || "MATCH OVER";
-  r.style.color = state.message && state.message.toLowerCase().includes("draw") ? "#ffcc44" : "#00ffcc";
-  document.getElementById("end-message").textContent = state.message || "";
+    if (modifier === "doublehit") {
+      if (type !== "go") {
+        room.currentRound.signalOpen = false;
+        const shield = player.heldPowerup === "SHIELD";
+        if (!shield) damageEntity(room, player, damage);
+        if (shield) player.heldPowerup = null;
+        room.message = `${player.name} pressed wrong!${shield ? " (Shield absorbed it)" : ""}`;
+        emitRoom(room);
+        cb?.({ ok: false, shielded: shield });
+        return setTimeout(() => startResolveThenNext(room), 900);
+      }
 
-  document.getElementById("end-scoreboard").innerHTML =
-    [...state.players]
-      .sort((a, b) => b.score - a.score || b.hp - a.hp)
-      .map((p, i) => `<li><span>${["🥇","🥈","🥉"][i] || "#" + (i + 1)} ${p.name}</span><span class="score">${p.score} pts · HP ${p.hp}/${p.maxHp}</span></li>`)
-      .join("");
+      room.currentRound.doubleHit = (room.currentRound.doubleHit || 0) + 1;
+      const points = 1 + fastBonus;
+      const dbl = player.heldPowerup === "DOUBLE";
+      addScore(room, player, points * (dbl ? 2 : 1));
+      if (dbl) player.heldPowerup = null;
+      emitRoom(room);
 
-  if (state.message && state.message.toLowerCase().includes("draw")) playLose();
-  else playWin();
-}
+      if (room.currentRound.doubleHit < 2) {
+        room.message = "ONE MORE!";
+        emitRoom(room);
+        cb?.({ ok: true, partial: true });
+        return;
+      }
 
-function goHome() {
-  myCode = null;
-  clearInterval(timerInterval);
-  stopPulse();
-  lastPhase = null;
-  lastMessage = null;
-  myRevealSignal = null;
-  reactLocked = false;
-  showScreen("screen-home");
-}
+      room.currentRound.signalOpen = false;
+      room.message = `${player.name} completed the chain!${dbl ? " (2× DOUBLE!)" : ""}`;
+      emitRoom(room);
+      cb?.({ ok: true });
+      return setTimeout(() => startResolveThenNext(room), 900);
+    }
 
-updateDiffInfo();
-</script>
-</body>
-</html>
+    const correct = target === type;
+    room.currentRound.signalOpen = false;
+
+    if (correct) {
+      const dbl = player.heldPowerup === "DOUBLE";
+      addScore(room, player, (1 + fastBonus) * (dbl ? 2 : 1));
+      if (dbl) player.heldPowerup = null;
+
+      if (modifier === "bomb") room.message = `${player.name} defused it!${dbl ? " (2× DOUBLE!)" : ""}`;
+      else if (modifier === "inverted") room.message = `${player.name} saw through the lie!${dbl ? " (2× DOUBLE!)" : ""}`;
+      else room.message = `${player.name} got it!${dbl ? " (2× DOUBLE!)" : ""}`;
+
+      emitRoom(room);
+      cb?.({ ok: true });
+      return setTimeout(() => startResolveThenNext(room), 900);
+    }
+
+    const shield = player.heldPowerup === "SHIELD";
+    if (!shield) damageEntity(room, player, damage);
+    if (shield) player.heldPowerup = null;
+
+    if (modifier === "bomb") room.message = `${player.name} hit the wrong wire! 💥${shield ? " (Shield absorbed it!)" : ""}`;
+    else if (modifier === "inverted") room.message = `${player.name} fell for the trick!${shield ? " (Shield absorbed it!)" : ""}`;
+    else room.message = `${player.name} messed up.${shield ? " (Shield absorbed it!)" : ""}`;
+
+    emitRoom(room);
+    cb?.({ ok: false, shielded: shield });
+    return setTimeout(() => startResolveThenNext(room), 900);
+  });
+
+  socket.on("escapeSubmit", ({ code, answer }, cb) => {
+    code = String(code || "").toUpperCase().trim();
+    const room = rooms.get(code);
+
+    if (!room || room.mode !== "escape" || room.phase !== "escape" || !room.currentPuzzle) {
+      return cb?.({ ok: false, error: "No active escape puzzle." });
+    }
+
+    const player = room.players.find((p) => p.id === socket.id);
+    if (!player) return cb?.({ ok: false, error: "Not in room." });
+
+    const submitted = normToken(answer);
+    const target = room.currentPuzzle.answer;
+
+    if (submitted !== target) {
+      room.escape.strikes += 1;
+      room.message = `${player.name} was wrong. Strike ${room.escape.strikes}/3.`;
+      emitRoom(room);
+
+      if (room.escape.strikes >= 3) {
+        finishGame(room, "Escape failed.");
+      }
+
+      cb?.({ ok: false, strikes: room.escape.strikes });
+      return;
+    }
+
+    const bonus = Math.max(1, Math.floor((room.currentPuzzle.timeEndsAt - Date.now()) / 800));
+    player.score += 2 + bonus;
+    room.escape.solved += 1;
+    room.message = `${player.name} solved puzzle ${room.round}!`;
+    emitRoom(room);
+
+    cb?.({ ok: true, bonus });
+
+    setTimeout(() => {
+      const fresh = rooms.get(code);
+      if (!fresh || fresh.mode !== "escape" || fresh.phase !== "escape") return;
+
+      if (fresh.escape.strikes >= 3) {
+        finishGame(fresh, "Escape failed.");
+        return;
+      }
+
+      if (fresh.round >= fresh.totalRounds) {
+        finishGame(fresh, "Escape cleared.");
+        return;
+      }
+
+      fresh.round += 1;
+      startEscapePuzzle(fresh);
+    }, 850);
+  });
+
+  socket.on("disconnect", () => {
+    for (const [code, room] of rooms.entries()) {
+      const idx = room.players.findIndex((p) => p.id === socket.id);
+      if (idx === -1) continue;
+
+      const wasHost = room.hostId === socket.id;
+      room.players.splice(idx, 1);
+
+      if (room.players.length === 0) {
+        rooms.delete(code);
+        continue;
+      }
+
+      if (wasHost) room.hostId = room.players[0].id;
+
+      if (room.mode === "team" && room.teams) {
+        room.teams = [
+          {
+            id: "A",
+            name: "Team A",
+            score: 0,
+            hp: room.players.filter((p) => p.team === "A").length * baseHpForDifficulty(room.difficulty),
+            maxHp: room.players.filter((p) => p.team === "A").length * baseHpForDifficulty(room.difficulty),
+          },
+          {
+            id: "B",
+            name: "Team B",
+            score: 0,
+            hp: room.players.filter((p) => p.team === "B").length * baseHpForDifficulty(room.difficulty),
+            maxHp: room.players.filter((p) => p.team === "B").length * baseHpForDifficulty(room.difficulty),
+          },
+        ];
+      }
+
+      emitRoom(room);
+    }
+  });
+});
+
+app.get("/", (_, res) => res.send("Signal Break server running."));
+
+const PORT = process.env.PORT || 5000;
+server.listen(PORT, "0.0.0.0", () => console.log(`Signal Break running on ${PORT}`));
