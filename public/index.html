@@ -114,7 +114,7 @@
     .message-bomb { color: #ff9900; animation: bomb-pulse .4s infinite alternate; }
     .message-double { color: #44aaff; }
     .clues { display: flex; gap: 12px; margin: 12px 0; }
-    .clue, .lock-tile, .powerup-card, .held-strip, .team-box {
+    .clue, .lock-tile, .powerup-card, .held-strip, .team-box, .escape-book {
       border-radius: 8px;
       background: #161622;
       border: 1px solid #333;
@@ -138,9 +138,8 @@
       margin-bottom: 12px;
       background: #1a1600;
       border-color: #886600;
-      animation: powerup-pulse 1.2s infinite;
     }
-    .powerup-card.claimed { background: #141414; border-color: #444; animation: none; }
+    .powerup-card.claimed { background: #141414; border-color: #444; }
     .pu-icon { font-size: 2rem; flex-shrink: 0; }
     .pu-info { flex: 1; }
     .pu-name { font-size: .9rem; color: #ffdd44; letter-spacing: 2px; font-weight: bold; }
@@ -151,7 +150,6 @@
       background: linear-gradient(135deg,#886600,#ffcc00);
       color: #0a0a0f;
       border: none;
-      animation: powerup-pop .8s infinite;
     }
     .team-box { margin-bottom: 12px; }
     .team-row { display: flex; justify-content: space-between; font-size: .85rem; color: #bbb; padding: 5px 0; }
@@ -345,6 +343,7 @@
     .reveal-flash.show-go   { display: block; background: #0a2a14; color: #00ff88; border: 1px solid #00ff88; }
     .reveal-flash.show-fake { display: block; background: #2a0010; color: #ff3355; border: 1px solid #ff3355; }
     .double-counter { text-align: center; font-size: 2rem; margin-bottom: 8px; letter-spacing: 8px; }
+
     .escape-book {
       border-radius: 8px;
       background: #0f0f18;
@@ -388,6 +387,37 @@
     .escape-input-row { display:flex; gap:8px; }
     .escape-input-row input { flex:1; margin-bottom: 0; }
     .escape-input-row button { width:auto; margin-bottom: 0; }
+    .escape-encoders {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .enc-card {
+      border-radius: 8px;
+      padding: 10px;
+      background: #12121a;
+      border: 1px solid #333;
+    }
+    .enc-name {
+      font-weight: bold;
+      letter-spacing: 2px;
+      color: #ffdd44;
+      font-size: .84rem;
+      margin-bottom: 4px;
+    }
+    .enc-detail {
+      font-size: .75rem;
+      color: #aaa;
+      line-height: 1.45;
+    }
+    .escape-desc {
+      text-align:center;
+      font-size: .85rem;
+      color: #aaa;
+      margin-bottom: 10px;
+      font-style: italic;
+    }
   </style>
 </head>
 <body>
@@ -565,6 +595,7 @@
       <div id="escape-card" style="display:none">
         <div class="escape-book">
           <h2>MANUAL BOOK</h2>
+          <div id="escape-desc" class="escape-desc"></div>
           <div class="escape-nav">
             <button class="btn-secondary" type="button" onclick="changeManualPage(-1)">PREV</button>
             <button class="btn-secondary" type="button" onclick="changeManualPage(1)">NEXT</button>
@@ -572,7 +603,8 @@
           <div id="escape-page" class="escape-pages"></div>
           <div id="escape-cipher" class="escape-cipher"></div>
           <div id="escape-meta" class="escape-meta"></div>
-          <div class="escape-input-row">
+          <div class="escape-encoders" id="escape-encoders"></div>
+          <div class="escape-input-row" style="margin-top:12px;">
             <input id="escape-answer" type="text" placeholder="Type the final answer" maxlength="24" />
             <button class="btn-primary" type="button" onclick="submitEscapeAnswer()">SUBMIT</button>
           </div>
@@ -1089,6 +1121,8 @@ function renderEscape(state) {
   const cipher = document.getElementById("escape-cipher");
   const meta = document.getElementById("escape-meta");
   const strikes = document.getElementById("escape-strikes");
+  const desc = document.getElementById("escape-desc");
+  const enc = document.getElementById("escape-encoders");
 
   if (!esc || !esc.currentPuzzle) {
     card.style.display = "none";
@@ -1101,8 +1135,17 @@ function renderEscape(state) {
 
   page.textContent = manualPages[manualPageIndex] || "";
   cipher.textContent = esc.currentPuzzle.cipher || "";
-  meta.textContent = `Mechanic: ${esc.currentPuzzle.mechanicLabel} • Time: ${Math.ceil((esc.currentPuzzle.timeMs || 0) / 1000)}s`;
+  meta.textContent = `Mechanic chain: ${esc.currentPuzzle.mechanicLabel} • Time: ${Math.ceil((esc.currentPuzzle.timeMs || 0) / 1000)}s`;
+  desc.textContent = esc.currentPuzzle.description || "";
   strikes.textContent = `Strikes: ${esc.strikes}/3`;
+
+  enc.innerHTML = (esc.currentPuzzle.stack || []).map(step => `
+    <div class="enc-card">
+      <div class="enc-name">${step.name}</div>
+      <div class="enc-detail">${step.detail}<br>${step.example}</div>
+    </div>
+  `).join("");
+
   document.getElementById("escape-answer").value = "";
 }
 
@@ -1366,6 +1409,12 @@ function goHome() {
   myRevealSignal = null;
   reactLocked = false;
   showScreen("screen-home");
+}
+
+function changeManualPage(delta) {
+  if (!manualPages.length) return;
+  manualPageIndex = (manualPageIndex + delta + manualPages.length) % manualPages.length;
+  document.getElementById("escape-page").textContent = manualPages[manualPageIndex] || "";
 }
 
 updateDiffInfo();
