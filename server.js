@@ -17,8 +17,8 @@ const GO_COLORS = ["RED", "ORANGE", "YELLOW", "WHITE"];
 const FAKE_COLORS = ["BLUE", "GREEN", "PURPLE", "CYAN"];
 const SHAPES = ["▲", "●", "■", "◆", "★", "⬟", "⬡", "⬢"];
 
-const GO_WORDS = ["ARC", "NEXUS", "DELTA", "SIGMA", "ALPHA", "BLAZE", "PRISM", "PULSE", "GHOST", "ORBIT", "SLASH", "SPARK", "FLINT", "CRUSH", "SWIFT"];
-const FAKE_WORDS = ["ECHO", "NEON", "FLUX", "VOID", "WIRE", "NODE", "LOCK", "NOVA", "ZERO", "VORTEX", "MIRROR", "STATIC", "VECTOR", "CIPHER", "FREEZE"];
+const GO_WORDS = ["ARC","NEXUS","DELTA","SIGMA","ALPHA","BLAZE","PRISM","PULSE","GHOST","ORBIT","SLASH","SPARK","FLINT","CRUSH","SWIFT"];
+const FAKE_WORDS = ["ECHO","NEON","FLUX","VOID","WIRE","NODE","LOCK","NOVA","ZERO","VORTEX","MIRROR","STATIC","VECTOR","CIPHER","FREEZE"];
 
 const POWERUP_TYPES = ["SHIELD", "DOUBLE", "BOOST", "REVEAL"];
 const POWERUP_SPAWN_CHANCE = 0.45;
@@ -66,6 +66,17 @@ function atbash(str) {
 
 function oddPositions(str) {
   return [...String(str)].filter((_, i) => i % 2 === 0).join("");
+}
+
+function rotateLeft(str, n) {
+  const s = String(str);
+  if (!s.length) return s;
+  const k = ((n % s.length) + s.length) % s.length;
+  return s.slice(k) + s.slice(0, k);
+}
+
+function stripVowels(str) {
+  return String(str).replace(/[AEIOU]/gi, "");
 }
 
 function maxPlayersForMode(mode) {
@@ -168,59 +179,115 @@ function escapeTimeMs(diff) {
 function makeEscapePuzzle(room) {
   const baseWord = rand(ESCAPE_WORDS);
   const shift = 3 + Math.floor(Math.random() * 7);
-  const cipher = caesar(baseWord, shift);
   const checksum = String((shift + room.round + baseWord.length) % 10);
 
+  const stack = [];
   let answer = baseWord;
-  let pages = [];
-  let mechanicLabel = "";
+  let cipher = caesar(baseWord, shift);
 
   if (room.difficulty === "easy") {
+    stack.push({
+      name: "CAESAR",
+      detail: `Shift the cipher BACK by ${shift}.`,
+      example: `Cipher: ${cipher}`,
+      method: `Subtract ${shift}`,
+    });
     answer = baseWord;
-    pages = [
-      `PAGE 1 — WHEEL CALIBRATION\nShift every letter BACK by ${shift}.`,
-      `PAGE 2 — FINAL STEP\nSubmit the recovered word exactly as written.`,
-    ];
-    mechanicLabel = "CAESAR";
   } else if (room.difficulty === "normal") {
+    stack.push({
+      name: "CAESAR",
+      detail: `Shift the cipher BACK by ${shift}.`,
+      example: `Cipher: ${cipher}`,
+      method: `Subtract ${shift}`,
+    });
+    stack.push({
+      name: "MIRROR",
+      detail: "Reverse the decoded word.",
+      example: "Left becomes right.",
+      method: "Reverse",
+    });
     answer = reverseStr(baseWord);
-    pages = [
-      `PAGE 1 — WHEEL CALIBRATION\nShift every letter BACK by ${shift}.`,
-      `PAGE 2 — MIRROR RULE\nAfter decoding, reverse the word.`,
-      `PAGE 3 — FINAL STEP\nThe answer is the mirrored word.`,
-    ];
-    mechanicLabel = "CAESAR + MIRROR";
   } else if (room.difficulty === "hard") {
+    stack.push({
+      name: "CAESAR",
+      detail: `Shift the cipher BACK by ${shift}.`,
+      example: `Cipher: ${cipher}`,
+      method: `Subtract ${shift}`,
+    });
+    stack.push({
+      name: "MIRROR",
+      detail: "Reverse the decoded word.",
+      example: "Left becomes right.",
+      method: "Reverse",
+    });
+    stack.push({
+      name: "FRACTURE",
+      detail: "Keep only letters in odd positions.",
+      example: "1st, 3rd, 5th, ...",
+      method: "Odd positions",
+    });
     answer = oddPositions(reverseStr(baseWord));
-    pages = [
-      `PAGE 1 — WHEEL CALIBRATION\nShift every letter BACK by ${shift}.`,
-      `PAGE 2 — MIRROR RULE\nAfter decoding, reverse the word.`,
-      `PAGE 3 — FRACTURE RULE\nKeep only letters in odd positions.`,
-      `PAGE 4 — FINAL STEP\nSubmit the fractured code.`,
-    ];
-    mechanicLabel = "CAESAR + MIRROR + ODD POSITIONS";
   } else {
-    answer = atbash(oddPositions(reverseStr(baseWord))) + checksum;
-    pages = [
-      `PAGE 1 — WHEEL CALIBRATION\nShift every letter BACK by ${shift}.`,
-      `PAGE 2 — MIRROR RULE\nAfter decoding, reverse the word.`,
-      `PAGE 3 — FRACTURE RULE\nKeep only letters in odd positions.`,
-      `PAGE 4 — BLACK GLASS RULE\nApply Atbash to the remaining letters.`,
-      `PAGE 5 — FINAL CHECKSUM\nAppend the digit ${checksum} to the end.`,
-    ];
-    mechanicLabel = "CAESAR + MIRROR + ODD POSITIONS + ATBASH + CHECKSUM";
+    const vShift = 2 + Math.floor(Math.random() * 4);
+    cipher = caesar(rotateLeft(baseWord, vShift), shift);
+    stack.push({
+      name: "CAESAR",
+      detail: `Shift the cipher BACK by ${shift}.`,
+      example: `Cipher: ${cipher}`,
+      method: `Subtract ${shift}`,
+    });
+    stack.push({
+      name: "MIRROR",
+      detail: "Reverse the decoded word.",
+      example: "Left becomes right.",
+      method: "Reverse",
+    });
+    stack.push({
+      name: "FRACTURE",
+      detail: "Keep only letters in odd positions.",
+      example: "1st, 3rd, 5th, ...",
+      method: "Odd positions",
+    });
+    stack.push({
+      name: "BLACK GLASS",
+      detail: "Apply Atbash to the remaining letters.",
+      example: "A↔Z, B↔Y, C↔X...",
+      method: "Atbash",
+    });
+    stack.push({
+      name: "OFFSET",
+      detail: `Rotate the result left by ${vShift}.`,
+      example: `Shift the string ${vShift} spots left.`,
+      method: `Rotate ${vShift}`,
+    });
+    stack.push({
+      name: "CHECKSUM",
+      detail: `Append the digit ${checksum} to the end.`,
+      example: "Final digit matters.",
+      method: `Append ${checksum}`,
+    });
+    answer = `${rotateLeft(atbash(oddPositions(reverseStr(baseWord))), vShift)}${checksum}`;
   }
+
+  const pages = [];
+  pages.push(`PAGE 1 — ENCODER INDEX\nThe first layer is always Caesar.\nUnwind the chain in order.`);
+  stack.forEach((step, i) => {
+    pages.push(`PAGE ${i + 2} — ${step.name}\n${step.detail}\n${step.example}`);
+  });
 
   return {
     id: `${room.code}-${room.round}-${Date.now()}`,
     cipher,
     answer: normToken(answer),
     pages,
-    mechanicLabel,
+    stack,
+    mechanicLabel: stack.map(s => s.name).join(" → "),
+    description: `Unwind ${stack.length} encoder layer${stack.length === 1 ? "" : "s"} and submit the final code.`,
     timeMs: escapeTimeMs(room.difficulty),
     shift,
     checksum,
     baseWord,
+    solveText: `Decoded stage ${room.round} cleared.`,
   };
 }
 
@@ -320,7 +387,9 @@ function publicRoom(room) {
       currentPuzzle: room.currentPuzzle ? {
         cipher: room.currentPuzzle.cipher,
         pages: room.currentPuzzle.pages,
+        stack: room.currentPuzzle.stack,
         mechanicLabel: room.currentPuzzle.mechanicLabel,
+        description: room.currentPuzzle.description,
         timeEndsAt: room.currentPuzzle.timeEndsAt,
         timeMs: room.currentPuzzle.timeMs,
       } : null,
@@ -491,7 +560,7 @@ function startEscapePuzzle(room) {
     timeEndsAt: Date.now() + puzzle.timeMs,
   };
   room.phase = "escape";
-  room.message = `Puzzle ${room.round} / ${room.totalRounds}`;
+  room.message = puzzle.description;
   emitRoom(room);
 
   const puzzleId = puzzle.id;
@@ -523,6 +592,7 @@ io.on("connection", socket => {
     const diff = VALID_DIFFS.includes(difficulty) ? difficulty : "normal";
     const gameMode = VALID_MODES.includes(mode) ? mode : "ffa";
     const code = makeCode();
+
     const room = {
       code,
       hostId: socket.id,
@@ -569,17 +639,19 @@ io.on("connection", socket => {
     if (room.players.some((p) => p.id === socket.id)) return cb?.({ ok: true, state: publicRoom(room) });
     if (room.players.length >= maxPlayersForMode(room.mode)) return cb?.({ ok: false, error: "Room is full." });
 
-    const player = {
+    const teamPick = room.mode === "team"
+      ? (room.players.filter((p) => p.team === "A").length <= room.players.filter((p) => p.team === "B").length ? "A" : "B")
+      : null;
+
+    room.players.push({
       id: socket.id,
       name: String(name || `Player ${room.players.length + 1}`).slice(0, 20),
       score: 0,
       hp: baseHpForDifficulty(room.difficulty),
       maxHp: baseHpForDifficulty(room.difficulty),
       heldPowerup: null,
-      team: room.mode === "team" ? ((room.players.filter((p) => p.team === "A").length <= room.players.filter((p) => p.team === "B").length) ? "A" : "B") : null,
-    };
-
-    room.players.push(player);
+      team: teamPick,
+    });
 
     if (room.mode === "team" && room.teams) {
       room.teams = [
@@ -643,8 +715,8 @@ io.on("connection", socket => {
         return;
       }
 
-      fresh.objective = difficultyFor({ difficulty: fresh.difficulty, round: 1 }).objective;
       initializeStats(fresh);
+      fresh.objective = difficultyFor({ difficulty: fresh.difficulty, round: 1 }).objective;
       startPrep(fresh);
       cb?.({ ok: true });
     }, 700);
@@ -786,7 +858,7 @@ io.on("connection", socket => {
 
     if (submitted !== target) {
       room.escape.strikes += 1;
-      room.message = `${player.name} was wrong. Strike ${room.escape.strikes}/3.`;
+      room.message = `Wrong decode. Strike ${room.escape.strikes}/3.`;
       emitRoom(room);
 
       if (room.escape.strikes >= 3) {
@@ -800,7 +872,7 @@ io.on("connection", socket => {
     const bonus = Math.max(1, Math.floor((room.currentPuzzle.timeEndsAt - Date.now()) / 800));
     player.score += 2 + bonus;
     room.escape.solved += 1;
-    room.message = `${player.name} solved puzzle ${room.round}!`;
+    room.message = room.currentPuzzle.solveText || `Decoded stage ${room.round} cleared.`;
     emitRoom(room);
 
     cb?.({ ok: true, bonus });
